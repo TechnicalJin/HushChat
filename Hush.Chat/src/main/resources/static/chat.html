@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Room - Hush.Chat</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/chat.css">
+</head>
+<body>
+<div class="chat-container">
+    <!-- Chat Header -->
+    <header class="chat-header">
+        <div class="room-info">
+            <h2 id="roomName">Loading...</h2>
+            <div class="room-meta">
+                <span class="room-code">Code: <strong id="roomCode">-----</strong></span>
+                <span class="user-count" id="userCount">👥 0/10</span>
+            </div>
+        </div>
+        <button id="leaveRoomBtn" class="btn-leave">Leave Room</button>
+    </header>
+
+    <!-- Messages Area -->
+    <main class="messages-container" id="messagesContainer">
+        <div class="welcome-message">
+            <span class="lock-icon">🔐</span>
+            <p>Welcome to <strong id="welcomeRoomName"></strong></p>
+            <p class="small-text">Messages will auto-delete after 10 minutes</p>
+        </div>
+    </main>
+
+    <!-- Message Input -->
+    <footer class="message-input-container">
+        <form id="messageForm" class="message-form">
+            <input
+                    type="text"
+                    id="messageInput"
+                    placeholder="Type your message..."
+                    maxlength="1000"
+                    autocomplete="off"
+                    required
+            >
+            <button type="submit" class="btn-send">
+                <span>Send</span>
+            </button>
+        </form>
+        <div class="input-info">
+            <span id="userName"></span>
+        </div>
+    </footer>
+</div>
+
+<!-- Leave Room Modal (Simple) -->
+<div id="leaveModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3>Leave Room?</h3>
+        <p>Are you sure you want to leave this chat room?</p>
+        <div class="modal-actions">
+            <button id="confirmLeave" class="btn btn-danger">Leave</button>
+            <button id="cancelLeave" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script>
+    // Check if user has joined a room
+    const roomCode = localStorage.getItem('roomCode');
+    const roomName = localStorage.getItem('roomName');
+    const userId = localStorage.getItem('userId');
+    const userName = localStorage.getItem('userName');
+
+    if (!roomCode || !userId || !userName) {
+        alert('Please create or join a room first');
+        window.location.href = 'index.html';
+    }
+
+    // Display room info
+    document.getElementById('roomCode').textContent = roomCode;
+    document.getElementById('roomName').textContent = roomName || 'Chat Room';
+    document.getElementById('welcomeRoomName').textContent = roomName || 'Chat Room';
+    document.getElementById('userName').textContent = `Chatting as: ${userName}`;
+
+    // Fetch and display room info
+    async function loadRoomInfo() {
+        try {
+            const response = await api.get(`/rooms/${roomCode}/info`);
+            if (response.success) {
+                const info = response.data;
+                document.getElementById('userCount').textContent = 
+                    `👥 ${info.currentUsers}/${info.maxUsers}`;
+            }
+        } catch (error) {
+            console.error('Failed to load room info:', error);
+        }
+    }
+
+    loadRoomInfo();
+    // Refresh room info every 10 seconds
+    setInterval(loadRoomInfo, 10000);
+
+    // Send Message (placeholder - will be implemented in Phase 4)
+    document.getElementById('messageForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = document.getElementById('messageInput');
+        const message = input.value.trim();
+        
+        if (message) {
+            // Placeholder: Display message locally
+            displayMessage(userName, message, new Date().toISOString(), true);
+            input.value = '';
+            
+            // TODO: Send to server in Phase 4
+            console.log('Message sending will be implemented in Phase 4');
+        }
+    });
+
+    // Display message in UI
+    function displayMessage(senderName, text, timestamp, isOwn) {
+        const messagesContainer = document.getElementById('messagesContainer');
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${isOwn ? 'message-own' : 'message-other'}`;
+        
+        messageDiv.innerHTML = `
+            <div class="message-header">
+                <span class="message-sender">${senderName}</span>
+                <span class="message-time">${new Date(timestamp).toLocaleTimeString()}</span>
+            </div>
+            <div class="message-content">${escapeHtml(text)}</div>
+        `;
+        
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    // Leave Room
+    document.getElementById('leaveRoomBtn').addEventListener('click', () => {
+        document.getElementById('leaveModal').style.display = 'flex';
+    });
+
+    document.getElementById('cancelLeave').addEventListener('click', () => {
+        document.getElementById('leaveModal').style.display = 'none';
+    });
+
+    document.getElementById('confirmLeave').addEventListener('click', async () => {
+        try {
+            await api.post('/rooms/leave', {
+                roomCode: roomCode,
+                userId: userId
+            });
+            
+            // Clear local storage
+            localStorage.removeItem('roomCode');
+            localStorage.removeItem('roomName');
+            localStorage.removeItem('userId');
+            localStorage.removeItem('userName');
+            localStorage.removeItem('isCreator');
+            
+            window.location.href = 'index.html';
+        } catch (error) {
+            alert('Failed to leave room: ' + error.message);
+        }
+    });
+
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+</script>
+</body>
+</html>

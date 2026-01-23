@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hush.Chat - Privacy-First Messaging</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+<div class="container">
+    <header class="header">
+        <div class="logo">
+            <span class="lock-icon">🔐</span>
+            <h1>Hush.Chat</h1>
+        </div>
+        <p class="tagline">Privacy-First Ephemeral Messaging</p>
+    </header>
+
+    <main class="main-content">
+        <div class="card">
+            <h2>Welcome to Hush.Chat</h2>
+            <p class="description">
+                Experience truly private messaging. No accounts, no history,
+                messages disappear after 10 minutes.
+            </p>
+
+            <div class="features">
+                <div class="feature">
+                    <span class="icon">⏱️</span>
+                    <span>10-Minute Message Expiry</span>
+                </div>
+                <div class="feature">
+                    <span class="icon">🚫</span>
+                    <span>No Permanent Storage</span>
+                </div>
+                <div class="feature">
+                    <span class="icon">🔒</span>
+                    <span>Zero Chat History</span>
+                </div>
+            </div>
+
+            <!-- Room Creation Form -->
+            <div id="createRoomSection" class="room-section">
+                <h3>Create New Room</h3>
+                <form id="createRoomForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="roomName">Room Name</label>
+                        <input
+                                type="text"
+                                id="roomName"
+                                name="roomName"
+                                placeholder="e.g., Team Discussion"
+                                minlength="3"
+                                maxlength="50"
+                                required
+                        >
+                    </div>
+                    <div class="form-group">
+                        <label for="creatorName">Your Name</label>
+                        <input
+                                type="text"
+                                id="creatorName"
+                                name="creatorName"
+                                placeholder="e.g., John"
+                                minlength="2"
+                                maxlength="30"
+                                required
+                        >
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="createRoomBtn">
+                        Create Room
+                    </button>
+                </form>
+            </div>
+
+            <div class="divider">OR</div>
+
+            <!-- Room Join Form -->
+            <div id="joinRoomSection" class="room-section">
+                <h3>Join Existing Room</h3>
+                <form id="joinRoomForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="roomCode">Room Code</label>
+                        <input
+                                type="text"
+                                id="roomCode"
+                                name="roomCode"
+                                placeholder="e.g., ABC12"
+                                pattern="[A-Z0-9]{5}"
+                                maxlength="5"
+                                style="text-transform: uppercase;"
+                                required
+                        >
+                        <small class="help-text">
+                            Enter the 5-character room code shared with you
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <label for="joinerName">Your Name</label>
+                        <input
+                                type="text"
+                                id="joinerName"
+                                name="joinerName"
+                                placeholder="e.g., Jane"
+                                minlength="2"
+                                maxlength="30"
+                                required
+                        >
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="joinRoomBtn">
+                        Join Room
+                    </button>
+                </form>
+            </div>
+
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+            <div id="successMessage" class="success-message" style="display: none;"></div>
+        </div>
+
+        <div class="info-section">
+            <h3>How It Works</h3>
+            <ol class="steps">
+                <li><strong>Create a Room:</strong> Enter room name and your name to get a unique 5-character room code</li>
+                <li><strong>Share Code:</strong> Give the room code to people you want to chat with</li>
+                <li><strong>Join & Chat:</strong> Others enter the code to join your room</li>
+                <li><strong>Auto-Delete:</strong> All messages automatically disappear after 10 minutes</li>
+            </ol>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2026 Hush.Chat - No data is permanently stored</p>
+    </footer>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/room.js"></script>
+</body>
+</html>

@@ -65,4 +65,8 @@ public class AppConfig {
     public static class PollingConfig {
         private int intervalSeconds = 2;
     }
+
+    public int getOtpPerHour() {
+        return rateLimit.getOtpPerHour();
+    }
 }
