@@ -55,6 +55,9 @@ public class RoomService {
         
         roomStore.save(roomCode, room);
         
+        // Record creator's join time for message visibility
+        roomStore.recordUserJoinTime(roomCode, creatorId);
+        
         log.info("Room created - Code: {}, Name: {}, Creator: {}", 
             roomCode, dto.getRoomName(), dto.getUserName());
         
@@ -90,6 +93,9 @@ public class RoomService {
             throw new UnauthorizedException("Failed to join room");
         }
         
+        // Record user's join time for message visibility
+        roomStore.recordUserJoinTime(roomCode, userId);
+        
         // Update activity
         room.updateActivity(appConfig.getRoom().getInactivityTimeoutMinutes());
         roomStore.save(roomCode, room);
@@ -111,6 +117,9 @@ public class RoomService {
         }
         
         room.removeUser(userId);
+        
+        // Remove user's join time tracking
+        roomStore.removeUserJoinTime(roomCode, userId);
         
         // If room is empty, delete it
         if (room.getActiveUserIds().isEmpty()) {

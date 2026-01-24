@@ -26,16 +26,22 @@ const api = {
     /**
      * Make GET request
      */
-    async get(endpoint, requiresAuth = false) {
+    async get(endpoint, requiresAuth = false, timeoutMs = null) {
         try {
             const headers = requiresAuth ? this.getAuthHeaders() : {
                 'Content-Type': 'application/json'
             };
 
+            // For long polling endpoints, use a much longer timeout (30 seconds + buffer)
+            let effectiveTimeout = timeoutMs || config.REQUEST_TIMEOUT;
+            if (endpoint.includes('/poll')) {
+                effectiveTimeout = config.LONG_POLL_TIMEOUT || 35000;
+            }
+
             const response = await fetch(`${config.API_BASE_URL}${endpoint}`, {
                 method: 'GET',
                 headers: headers,
-                signal: AbortSignal.timeout(config.REQUEST_TIMEOUT)
+                signal: AbortSignal.timeout(effectiveTimeout)
             });
 
             return await this.handleResponse(response);
@@ -139,17 +145,24 @@ const api = {
      * Handle API errors
      */
     handleError(error) {
-        console.error('API Error:', error);
+        // Don't log timeout errors as errors (expected in long polling)
+        const isTimeout = error.name === 'TimeoutError' || 
+                          error.name === 'AbortError' ||
+                          (error.message && error.message.includes('timed out'));
+        
+        if (!isTimeout) {
+            console.error('API Error:', error);
+        }
 
-        if (error.name === 'AbortError') {
+        if (error.name === 'AbortError' || error.name === 'TimeoutError') {
             return new Error('Request timeout. Please check your connection.');
         }
 
-        if (error.message.includes('Failed to fetch')) {
+        if (error.message && error.message.includes('Failed to fetch')) {
             return new Error('Cannot connect to server. Please check if the server is running.');
         }
 
-        if (error.message.includes('Unauthorized') || error.message.includes('Session')) {
+        if (error.message && (error.message.includes('Unauthorized') || error.message.includes('Session'))) {
             // Clear session and redirect to login
             localStorage.removeItem(config.STORAGE_KEYS.SESSION_TOKEN);
             localStorage.removeItem(config.STORAGE_KEYS.USER_ID);

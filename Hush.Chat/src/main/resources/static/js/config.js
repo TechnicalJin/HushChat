@@ -5,6 +5,7 @@ const config = {
 
     // Timeouts
     REQUEST_TIMEOUT: 30000, // 30 seconds
+    LONG_POLL_TIMEOUT: 35000, // 35 seconds for long polling (server waits 20s + network buffer)
 
     // OTP Settings
     OTP_LENGTH: 6,
