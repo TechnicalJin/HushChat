@@ -17,6 +17,13 @@ const chat = {
     editingMessageId: null,
     originalMessageContent: null,
     
+    // Scroll-to-bottom state
+    scrollToBottomBtn: null,
+    unreadBadge: null,
+    unreadCount: 0,
+    isUserAtBottom: true,
+    scrollThreshold: 100, // px from bottom to consider "at bottom"
+    
     /**
      * Initialize chat module
      */
@@ -33,6 +40,10 @@ const chat = {
         this.messageInput = document.getElementById('messageInput');
         this.messageForm = document.getElementById('messageForm');
         
+        // Initialize scroll-to-bottom elements
+        this.scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
+        this.unreadBadge = document.getElementById('unreadBadge');
+        
         if (!this.roomCode || !this.userId || !this.userName) {
             console.error('Missing room or user info');
             window.location.href = 'index.html';
@@ -40,6 +51,7 @@ const chat = {
         }
         
         this.setupEventListeners();
+        this.setupScrollListener();
         this.startExpiryCountdownUpdater();
         console.log('Chat initialized for room:', this.roomCode);
     },
@@ -84,6 +96,119 @@ const chat = {
                 this.cancelEdit();
             }
         });
+    },
+    
+    /**
+     * Setup scroll listener for tracking scroll position
+     */
+    setupScrollListener() {
+        if (!this.messagesContainer) return;
+        
+        this.messagesContainer.addEventListener('scroll', () => {
+            this.checkScrollPosition();
+        });
+        
+        // Setup scroll-to-bottom button click handler
+        if (this.scrollToBottomBtn) {
+            this.scrollToBottomBtn.addEventListener('click', () => {
+                this.scrollToBottomSmooth();
+            });
+        }
+        
+        // Initial check
+        this.checkScrollPosition();
+    },
+    
+    /**
+     * Check if user is at the bottom of the chat
+     */
+    checkScrollPosition() {
+        if (!this.messagesContainer) return;
+        
+        const { scrollTop, scrollHeight, clientHeight } = this.messagesContainer;
+        const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+        
+        const wasAtBottom = this.isUserAtBottom;
+        this.isUserAtBottom = distanceFromBottom <= this.scrollThreshold;
+        
+        // User scrolled to bottom - reset unread count
+        if (this.isUserAtBottom && !wasAtBottom) {
+            this.resetUnreadCount();
+        }
+        
+        // Update button visibility
+        this.updateScrollButtonVisibility();
+    },
+    
+    /**
+     * Update the scroll-to-bottom button visibility
+     */
+    updateScrollButtonVisibility() {
+        if (!this.scrollToBottomBtn) return;
+        
+        if (this.isUserAtBottom) {
+            this.scrollToBottomBtn.classList.remove('visible');
+            this.scrollToBottomBtn.style.display = 'none';
+        } else {
+            this.scrollToBottomBtn.style.display = 'flex';
+            // Use requestAnimationFrame for smooth transition
+            requestAnimationFrame(() => {
+                this.scrollToBottomBtn.classList.add('visible');
+            });
+        }
+    },
+    
+    /**
+     * Increment unread count when new message arrives
+     */
+    incrementUnreadCount() {
+        if (this.isUserAtBottom) return;
+        
+        this.unreadCount++;
+        this.updateUnreadBadge();
+    },
+    
+    /**
+     * Reset unread count to zero
+     */
+    resetUnreadCount() {
+        this.unreadCount = 0;
+        this.updateUnreadBadge();
+    },
+    
+    /**
+     * Update the unread badge display
+     */
+    updateUnreadBadge() {
+        if (!this.unreadBadge) return;
+        
+        if (this.unreadCount > 0) {
+            this.unreadBadge.textContent = this.unreadCount > 99 ? '99+' : this.unreadCount;
+            this.unreadBadge.style.display = 'flex';
+        } else {
+            this.unreadBadge.style.display = 'none';
+        }
+    },
+    
+    /**
+     * Smooth scroll to bottom and reset unread count
+     */
+    scrollToBottomSmooth() {
+        if (!this.messagesContainer) return;
+        
+        this.messagesContainer.scrollTo({
+            top: this.messagesContainer.scrollHeight,
+            behavior: 'smooth'
+        });
+        
+        // Reset unread count immediately
+        this.resetUnreadCount();
+        
+        // Hide button after scroll completes
+        setTimeout(() => {
+            this.isUserAtBottom = true;
+            this.updateScrollButtonVisibility();
+        }, 300);
     },
     
     /**
@@ -343,7 +468,17 @@ const chat = {
             }
         }
         
-        this.scrollToBottom();
+        // Handle scrolling and unread count
+        if (isOwn) {
+            // Own messages: always scroll to bottom
+            this.forceScrollToBottom();
+        } else {
+            // Other's messages: increment unread if not at bottom
+            if (!this.isUserAtBottom) {
+                this.incrementUnreadCount();
+            }
+            this.scrollToBottom();
+        }
     },
     
     /**
@@ -424,11 +559,25 @@ const chat = {
     },
     
     /**
-     * Scroll to bottom of messages container
+     * Scroll to bottom of messages container (only if user is at bottom)
      */
     scrollToBottom() {
         if (this.messagesContainer) {
+            if (this.isUserAtBottom) {
+                this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+            }
+        }
+    },
+    
+    /**
+     * Force scroll to bottom (for own messages)
+     */
+    forceScrollToBottom() {
+        if (this.messagesContainer) {
             this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+            this.isUserAtBottom = true;
+            this.resetUnreadCount();
+            this.updateScrollButtonVisibility();
         }
     },
     
@@ -447,6 +596,13 @@ const chat = {
     handleRoomClosed() {
         // Stop expiry updater
         this.stopExpiryCountdownUpdater();
+        
+        // Hide scroll-to-bottom button
+        if (this.scrollToBottomBtn) {
+            this.scrollToBottomBtn.style.display = 'none';
+            this.scrollToBottomBtn.classList.remove('visible');
+        }
+        this.unreadCount = 0;
         
         // Stop polling safely
         if (typeof polling !== 'undefined' && polling && typeof polling.stopPolling === 'function') {
@@ -774,6 +930,14 @@ const chat = {
     cleanup() {
         this.stopExpiryCountdownUpdater();
         this.closeContextMenu();
+        
+        // Hide scroll-to-bottom button
+        if (this.scrollToBottomBtn) {
+            this.scrollToBottomBtn.style.display = 'none';
+            this.scrollToBottomBtn.classList.remove('visible');
+        }
+        this.unreadCount = 0;
+        
         localStorage.removeItem('roomCode');
         localStorage.removeItem('roomName');
         localStorage.removeItem('userId');
