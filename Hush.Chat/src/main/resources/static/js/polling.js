@@ -16,12 +16,22 @@ const polling = {
      * Initialize polling module
      */
     init() {
-        this.roomCode = localStorage.getItem('roomCode');
-        this.userId = localStorage.getItem('userId');
+        try {
+            this.roomCode = localStorage.getItem('roomCode');
+            this.userId = localStorage.getItem('userId');
+        } catch (e) {
+            console.error('Failed to access localStorage for polling');
+            return;
+        }
         
         // Get stored last message time or use join time
-        const storedTime = localStorage.getItem('lastMessageTime');
-        const joinTime = localStorage.getItem('joinTime');
+        let storedTime, joinTime;
+        try {
+            storedTime = localStorage.getItem('lastMessageTime');
+            joinTime = localStorage.getItem('joinTime');
+        } catch (e) {
+            // Ignore localStorage errors
+        }
         
         if (storedTime) {
             this.lastMessageTime = storedTime;
@@ -78,10 +88,18 @@ const polling = {
      * Stop polling
      */
     stopPolling() {
+        if (!this.isPolling && !this.pollInterval) {
+            return; // Already stopped
+        }
+        
         this.isPolling = false;
         
         if (this.pollInterval) {
-            clearTimeout(this.pollInterval);
+            try {
+                clearTimeout(this.pollInterval);
+            } catch (e) {
+                // Silently ignore timeout clear errors
+            }
             this.pollInterval = null;
         }
         
@@ -268,40 +286,51 @@ const polling = {
      * Handle polling errors
      */
     handlePollError(error) {
+        // Guard against null/undefined errors
+        if (!error) {
+            return;
+        }
+        
+        const errorMessage = error.message || '';
+        
         // Timeout errors are expected for long polling - don't log as error
         const isTimeout = error.name === 'TimeoutError' || 
-                          (error.message && error.message.includes('timed out')) ||
-                          (error.message && error.message.includes('timeout'));
+                          errorMessage.includes('timed out') ||
+                          errorMessage.includes('timeout');
         
         if (!isTimeout) {
-            console.warn('Polling issue:', error.message || error);
+            console.warn('Polling issue:', errorMessage || error);
         }
         
         this.retryCount++;
         
         // Check for room-related errors (room expired, closed, or not found)
-        if (error.message && (
-            error.message.includes('Room') || 
-            error.message.includes('not found') ||
-            error.message.includes('closed') ||
-            error.message.includes('expired') ||
-            error.message.includes('not a member') ||
-            error.message.includes('has been closed')
+        if (errorMessage && (
+            errorMessage.includes('Room') || 
+            errorMessage.includes('not found') ||
+            errorMessage.includes('closed') ||
+            errorMessage.includes('expired') ||
+            errorMessage.includes('not a member') ||
+            errorMessage.includes('has been closed')
         )) {
             // Room is gone or user was removed
             console.log('Room is no longer available, stopping polling');
             this.stopPolling();
             
-            if (typeof chat !== 'undefined' && chat.handleRoomClosed) {
-                chat.handleRoomClosed();
+            if (typeof chat !== 'undefined' && chat && typeof chat.handleRoomClosed === 'function') {
+                try {
+                    chat.handleRoomClosed();
+                } catch (e) {
+                    // Silently ignore room closed handler errors
+                }
             }
             return;
         }
         
         // Check for auth errors
-        if (error.message && (
-            error.message.includes('Unauthorized') || 
-            error.message.includes('Session')
+        if (errorMessage && (
+            errorMessage.includes('Unauthorized') || 
+            errorMessage.includes('Session')
         )) {
             // Session expired
             this.stopPolling();

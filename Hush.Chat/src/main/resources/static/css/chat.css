@@ -116,7 +116,8 @@ body {
 /* Message Bubbles */
 .message {
     margin-bottom: 16px;
-    max-width: 70%;
+    max-width: 80%;
+    min-width: 150px;
     animation: fadeIn 0.3s ease;
 }
 
@@ -149,7 +150,91 @@ body {
     padding: 12px 16px;
     border-radius: 12px;
     word-wrap: break-word;
+    word-break: break-word;
     line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+}
+
+/* Collapsible message content */
+.message-content.collapsible {
+    position: relative;
+}
+
+.message-content.collapsible.collapsed {
+    max-height: 150px;
+    overflow: hidden;
+}
+
+.message-content.collapsible.collapsed::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: linear-gradient(transparent, var(--other-message-bg));
+    pointer-events: none;
+}
+
+.message-own .message-content.collapsible.collapsed::after {
+    background: linear-gradient(transparent, var(--own-message-bg));
+}
+
+.message-content.collapsible.expanded {
+    max-height: none;
+    overflow-y: auto;
+}
+
+/* Read More / Show Less button */
+.read-more-btn {
+    display: block;
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 8px 0 4px 0;
+    text-align: left;
+    width: 100%;
+}
+
+.read-more-btn:hover {
+    text-decoration: underline;
+}
+
+.message-own .read-more-btn {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* Code-like content styling - applied via JS when message contains code patterns */
+.message-content.code-content {
+    font-family: 'Monaco', 'Menlo', 'Consolas', 'Courier New', monospace;
+    font-size: 0.9rem;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.message-own .message-content.code-content {
+    background: rgba(0, 0, 0, 0.15);
+}
+
+/* Scrollbar for message content */
+.message-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.message-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.message-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.message-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .message-own .message-content {
@@ -176,7 +261,7 @@ body {
     gap: 12px;
 }
 
-.message-form input {
+.message-form textarea {
     flex: 1;
     padding: 14px 18px;
     background: #0f172a;
@@ -185,12 +270,22 @@ body {
     color: var(--text-color);
     font-size: 1rem;
     transition: all 0.3s ease;
+    resize: none;
+    min-height: 48px;
+    max-height: 150px;
+    overflow-y: auto;
+    line-height: 1.4;
+    font-family: inherit;
 }
 
-.message-form input:focus {
+.message-form textarea:focus {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.message-form textarea::placeholder {
+    color: var(--text-secondary);
 }
 
 .btn-send {

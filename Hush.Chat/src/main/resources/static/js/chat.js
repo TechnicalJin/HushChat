@@ -50,15 +50,35 @@ const chat = {
             });
         }
         
-        // Handle Enter key (already handled by form submit)
+        // Handle Enter key for send, SHIFT+ENTER for new line
         if (this.messageInput) {
             this.messageInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     this.sendMessage();
                 }
+                // SHIFT+ENTER allows default behavior (new line)
+            });
+            
+            // Auto-grow textarea as user types
+            this.messageInput.addEventListener('input', () => {
+                this.autoGrowTextarea();
             });
         }
+    },
+    
+    /**
+     * Auto-grow textarea based on content
+     */
+    autoGrowTextarea() {
+        if (!this.messageInput) return;
+        
+        // Reset height to auto to get correct scrollHeight
+        this.messageInput.style.height = 'auto';
+        
+        // Set new height based on content (max 150px defined in CSS)
+        const newHeight = Math.min(this.messageInput.scrollHeight, 150);
+        this.messageInput.style.height = newHeight + 'px';
     },
     
     /**
@@ -86,6 +106,8 @@ const chat = {
      * Update all message expiry countdowns
      */
     updateAllExpiryCountdowns() {
+        if (!this.messagesContainer) return;
+        
         const messages = this.messagesContainer.querySelectorAll('.message[data-expiry-time]');
         const now = new Date();
         
@@ -170,8 +192,9 @@ const chat = {
             }, false);  // No auth required
             
             if (response.success) {
-                // Clear input
+                // Clear input and reset height
                 this.messageInput.value = '';
+                this.messageInput.style.height = 'auto';
                 
                 // Render the sent message immediately
                 this.renderMessage(response.data, true);
@@ -235,6 +258,20 @@ const chat = {
             urgencyClass = 'expiry-warning';
         }
         
+        // Check if content looks like code (SQL, scripts, etc.)
+        const isCodeContent = this.isCodeLikeContent(message.content);
+        const lineCount = (message.content.match(/\n/g) || []).length;
+        const isLongMessage = lineCount > 5 || message.content.length > 300;
+        
+        // Build content classes
+        let contentClasses = 'message-content';
+        if (isCodeContent) contentClasses += ' code-content';
+        if (isLongMessage) contentClasses += ' collapsible collapsed';
+        
+        // Generate unique ID for this message's content
+        const contentId = `content-${message.messageId}`;
+        const btnId = `btn-${message.messageId}`;
+        
         messageDiv.innerHTML = `
             <div class="message-header">
                 <span class="message-sender">${this.escapeHtml(message.senderName)}</span>
@@ -243,11 +280,70 @@ const chat = {
                     <span class="message-time">${timeString}</span>
                 </div>
             </div>
-            <div class="message-content">${this.escapeHtml(message.content)}</div>
+            <div id="${contentId}" class="${contentClasses}">${this.escapeHtml(message.content)}</div>
+            ${isLongMessage ? `<button id="${btnId}" class="read-more-btn" data-content-id="${contentId}">Read More ▼</button>` : ''}
         `;
         
         this.messagesContainer.appendChild(messageDiv);
+        
+        // Attach click handler for Read More button
+        if (isLongMessage) {
+            const btn = document.getElementById(btnId);
+            if (btn) {
+                btn.addEventListener('click', (e) => this.toggleReadMore(e));
+            }
+        }
+        
         this.scrollToBottom();
+    },
+    
+    /**
+     * Toggle Read More / Show Less for long messages
+     */
+    toggleReadMore(event) {
+        const btn = event.target;
+        const contentId = btn.dataset.contentId;
+        const content = document.getElementById(contentId);
+        
+        if (!content) return;
+        
+        if (content.classList.contains('collapsed')) {
+            content.classList.remove('collapsed');
+            content.classList.add('expanded');
+            btn.textContent = 'Show Less ▲';
+        } else {
+            content.classList.remove('expanded');
+            content.classList.add('collapsed');
+            btn.textContent = 'Read More ▼';
+        }
+    },
+    
+    /**
+     * Detect if content looks like code (SQL, scripts, logs, etc.)
+     */
+    isCodeLikeContent(content) {
+        if (!content) return false;
+        
+        // Check for multiple line breaks (multi-line content)
+        const lineCount = (content.match(/\n/g) || []).length;
+        if (lineCount < 2) return false;
+        
+        // Check for common code patterns
+        const codePatterns = [
+            /={3,}/,                    // Line separators like ====
+            /-{3,}/,                    // Dashed separators ---
+            /SELECT|INSERT|UPDATE|DELETE|FROM|WHERE/i,  // SQL keywords
+            /^\s*--\s/m,                // SQL comments
+            /^\s*\/\//m,                // Single-line comments
+            /^\s*#/m,                   // Hash comments (Python, Bash)
+            /function\s*\(/,            // JavaScript functions
+            /def\s+\w+\s*\(/,           // Python functions
+            /\{\s*\n/,                  // Opening braces with newline
+            /^\s{4,}\S/m,               // Indented code (4+ spaces)
+            /^\t+\S/m,                  // Tab indented code
+        ];
+        
+        return codePatterns.some(pattern => pattern.test(content));
     },
     
     /**
@@ -294,9 +390,13 @@ const chat = {
         // Stop expiry updater
         this.stopExpiryCountdownUpdater();
         
-        // Stop polling
-        if (typeof polling !== 'undefined') {
-            polling.stopPolling();
+        // Stop polling safely
+        if (typeof polling !== 'undefined' && polling && typeof polling.stopPolling === 'function') {
+            try {
+                polling.stopPolling();
+            } catch (e) {
+                // Silently ignore polling stop errors
+            }
         }
         
         // Show modal or alert

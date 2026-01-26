@@ -33,14 +33,14 @@
     <!-- Message Input -->
     <footer class="message-input-container">
         <form id="messageForm" class="message-form">
-            <input
-                    type="text"
+            <textarea
                     id="messageInput"
-                    placeholder="Type your message..."
-                    maxlength="1000"
+                    placeholder="Type your message... (Shift+Enter for new line)"
+                    maxlength="5000"
                     autocomplete="off"
+                    rows="1"
                     required
-            >
+            ></textarea>
             <button type="submit" class="btn-send">
                 <span>Send</span>
             </button>
@@ -86,8 +86,14 @@
     document.getElementById('welcomeRoomName').textContent = roomName || 'Chat Room';
     document.getElementById('userName').textContent = `Chatting as: ${userName}`;
 
+    // Track if room info fetch should continue
+    let roomInfoActive = true;
+    let roomInfoInterval = null;
+
     // Fetch and display room info
     async function loadRoomInfo() {
+        if (!roomInfoActive) return;
+        
         try {
             const response = await api.get(`/rooms/${roomCode}/info`);
             if (response.success) {
@@ -96,9 +102,18 @@
                     `👥 ${info.currentUsers}/${info.maxUsers}`;
             }
         } catch (error) {
-            console.error('Failed to load room info:', error);
+            // Only log once, not repeatedly
+            if (roomInfoActive) {
+                console.error('Failed to load room info:', error);
+            }
             // Check if room is closed
             if (error.message && error.message.includes('not found')) {
+                // Stop future room info fetches
+                roomInfoActive = false;
+                if (roomInfoInterval) {
+                    clearInterval(roomInfoInterval);
+                    roomInfoInterval = null;
+                }
                 if (typeof chat !== 'undefined' && chat.handleRoomClosed) {
                     chat.handleRoomClosed();
                 }
@@ -108,7 +123,7 @@
 
     loadRoomInfo();
     // Refresh room info every 10 seconds
-    setInterval(loadRoomInfo, 10000);
+    roomInfoInterval = setInterval(loadRoomInfo, 10000);
 
     // Leave Room
     document.getElementById('leaveRoomBtn').addEventListener('click', () => {
