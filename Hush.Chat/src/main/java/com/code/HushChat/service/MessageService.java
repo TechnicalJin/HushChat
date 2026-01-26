@@ -160,23 +160,11 @@ public class MessageService {
     
     /**
      * Cleanup expired messages - called by scheduled task
+     * Uses the store's optimized cleanup method for thread-safe removal.
+     * Privacy: Does NOT log message content, only counts.
      */
     public int cleanupExpiredMessages() {
-        int totalRemoved = 0;
-        
-        for (var entry : messageStore.getAll().entrySet()) {
-            String roomCode = entry.getKey();
-            List<ChatMessage> messages = entry.getValue();
-            
-            int initialSize = messages.size();
-            messages.removeIf(ChatMessage::isExpired);
-            int removed = initialSize - messages.size();
-            totalRemoved += removed;
-            
-            if (removed > 0) {
-                log.debug("Removed {} expired messages from room {}", removed, roomCode);
-            }
-        }
+        int totalRemoved = messageStore.removeAllExpiredMessages();
         
         if (totalRemoved > 0) {
             log.info("Cleanup: removed {} expired messages total", totalRemoved);

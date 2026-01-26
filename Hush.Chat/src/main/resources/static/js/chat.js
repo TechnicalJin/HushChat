@@ -9,6 +9,8 @@ const chat = {
     messageInput: null,
     messageForm: null,
     displayedMessageIds: new Set(),
+    expiryUpdateInterval: null,
+    MESSAGE_TTL_MINUTES: 10, // Must match backend config
     
     /**
      * Initialize chat module
@@ -33,6 +35,7 @@ const chat = {
         }
         
         this.setupEventListeners();
+        this.startExpiryCountdownUpdater();
         console.log('Chat initialized for room:', this.roomCode);
     },
     
@@ -56,6 +59,94 @@ const chat = {
                 }
             });
         }
+    },
+    
+    /**
+     * Start the expiry countdown updater
+     * Updates all visible message countdowns every second
+     */
+    startExpiryCountdownUpdater() {
+        // Update every second
+        this.expiryUpdateInterval = setInterval(() => {
+            this.updateAllExpiryCountdowns();
+        }, 1000);
+    },
+    
+    /**
+     * Stop the expiry countdown updater
+     */
+    stopExpiryCountdownUpdater() {
+        if (this.expiryUpdateInterval) {
+            clearInterval(this.expiryUpdateInterval);
+            this.expiryUpdateInterval = null;
+        }
+    },
+    
+    /**
+     * Update all message expiry countdowns
+     */
+    updateAllExpiryCountdowns() {
+        const messages = this.messagesContainer.querySelectorAll('.message[data-expiry-time]');
+        const now = new Date();
+        
+        messages.forEach(messageDiv => {
+            const expiryTimeStr = messageDiv.dataset.expiryTime;
+            if (!expiryTimeStr) return;
+            
+            const expiryTime = new Date(expiryTimeStr);
+            const remainingMs = expiryTime - now;
+            
+            if (remainingMs <= 0) {
+                // Message has expired - remove it with animation
+                this.removeExpiredMessage(messageDiv);
+            } else {
+                // Update countdown display
+                this.updateExpiryDisplay(messageDiv, remainingMs);
+            }
+        });
+    },
+    
+    /**
+     * Update the expiry countdown display for a message
+     */
+    updateExpiryDisplay(messageDiv, remainingMs) {
+        const expiryBadge = messageDiv.querySelector('.expiry-badge');
+        if (!expiryBadge) return;
+        
+        const remainingSeconds = Math.floor(remainingMs / 1000);
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = remainingSeconds % 60;
+        
+        // Format as MM:SS
+        const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        expiryBadge.textContent = `⏱ ${timeStr}`;
+        
+        // Visual urgency based on remaining time
+        expiryBadge.classList.remove('expiry-warning', 'expiry-critical');
+        
+        if (remainingSeconds <= 60) {
+            // Last minute - critical
+            expiryBadge.classList.add('expiry-critical');
+        } else if (remainingSeconds <= 180) {
+            // Last 3 minutes - warning
+            expiryBadge.classList.add('expiry-warning');
+        }
+    },
+    
+    /**
+     * Remove an expired message with fade-out animation
+     */
+    removeExpiredMessage(messageDiv) {
+        const messageId = messageDiv.dataset.messageId;
+        
+        // Add fade-out class
+        messageDiv.classList.add('message-expiring');
+        
+        // Remove after animation completes
+        setTimeout(() => {
+            messageDiv.remove();
+            this.displayedMessageIds.delete(messageId);
+        }, 500);
     },
     
     /**
@@ -90,7 +181,7 @@ const chat = {
         } catch (error) {
             console.error('Failed to send message:', error);
             
-            if (error.message.includes('Room') && error.message.includes('closed')) {
+            if (error.message.includes('Room') && (error.message.includes('closed') || error.message.includes('expired') || error.message.includes('not found'))) {
                 this.handleRoomClosed();
             } else {
                 this.showError('Failed to send message. Please try again.');
@@ -120,13 +211,37 @@ const chat = {
         messageDiv.className = `message ${isOwn ? 'message-own' : 'message-other'}`;
         messageDiv.dataset.messageId = message.messageId;
         
+        // Store expiry time for countdown
+        if (message.expiryTime) {
+            messageDiv.dataset.expiryTime = message.expiryTime;
+        }
+        
         const timestamp = new Date(message.timestamp);
         const timeString = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        // Calculate initial remaining time
+        const expiryTime = message.expiryTime ? new Date(message.expiryTime) : null;
+        const remainingMs = expiryTime ? expiryTime - new Date() : this.MESSAGE_TTL_MINUTES * 60 * 1000;
+        const remainingSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = remainingSeconds % 60;
+        const expiryDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        // Determine initial urgency class
+        let urgencyClass = '';
+        if (remainingSeconds <= 60) {
+            urgencyClass = 'expiry-critical';
+        } else if (remainingSeconds <= 180) {
+            urgencyClass = 'expiry-warning';
+        }
         
         messageDiv.innerHTML = `
             <div class="message-header">
                 <span class="message-sender">${this.escapeHtml(message.senderName)}</span>
-                <span class="message-time">${timeString}</span>
+                <div class="message-meta">
+                    <span class="expiry-badge ${urgencyClass}">⏱ ${expiryDisplay}</span>
+                    <span class="message-time">${timeString}</span>
+                </div>
             </div>
             <div class="message-content">${this.escapeHtml(message.content)}</div>
         `;
@@ -176,14 +291,24 @@ const chat = {
      * Handle room closed/expired
      */
     handleRoomClosed() {
+        // Stop expiry updater
+        this.stopExpiryCountdownUpdater();
+        
+        // Stop polling
+        if (typeof polling !== 'undefined') {
+            polling.stopPolling();
+        }
+        
         // Show modal or alert
         const modal = document.getElementById('leaveModal');
         if (modal) {
             const modalContent = modal.querySelector('.modal-content');
             if (modalContent) {
                 modalContent.innerHTML = `
+                    <div class="room-closed-icon">🔒</div>
                     <h3>Room Closed</h3>
-                    <p>This chat room has been closed or expired.</p>
+                    <p>This chat room has been closed due to inactivity or expiration.</p>
+                    <p class="small-text">All messages have been permanently deleted.</p>
                     <div class="modal-actions">
                         <button id="returnHome" class="btn btn-primary">Return Home</button>
                     </div>
@@ -196,7 +321,7 @@ const chat = {
                 });
             }
         } else {
-            alert('This chat room has been closed or expired.');
+            alert('This chat room has been closed or expired. All messages have been deleted.');
             this.cleanup();
             window.location.href = 'index.html';
         }
@@ -233,6 +358,7 @@ const chat = {
      * Cleanup on exit
      */
     cleanup() {
+        this.stopExpiryCountdownUpdater();
         localStorage.removeItem('roomCode');
         localStorage.removeItem('roomName');
         localStorage.removeItem('userId');

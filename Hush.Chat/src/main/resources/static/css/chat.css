@@ -298,6 +298,66 @@ body {
     }
 }
 
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* Message Expiry Styles */
+.message-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.expiry-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(99, 102, 241, 0.2);
+    color: var(--text-secondary);
+    font-family: 'Monaco', 'Menlo', monospace;
+    white-space: nowrap;
+}
+
+.expiry-badge.expiry-warning {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+}
+
+.expiry-badge.expiry-critical {
+    background: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    animation: pulse 1s ease-in-out infinite;
+}
+
+/* Message Expiring Animation */
+.message-expiring {
+    animation: fadeOut 0.5s ease forwards;
+    pointer-events: none;
+}
+
+/* Room Closed Modal */
+.room-closed-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+}
+
 /* Scrollbar */
 .messages-container::-webkit-scrollbar {
     width: 8px;

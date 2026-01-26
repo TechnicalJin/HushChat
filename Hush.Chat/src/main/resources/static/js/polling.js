@@ -279,14 +279,17 @@ const polling = {
         
         this.retryCount++;
         
-        // Check for room-related errors
+        // Check for room-related errors (room expired, closed, or not found)
         if (error.message && (
             error.message.includes('Room') || 
             error.message.includes('not found') ||
             error.message.includes('closed') ||
-            error.message.includes('not a member')
+            error.message.includes('expired') ||
+            error.message.includes('not a member') ||
+            error.message.includes('has been closed')
         )) {
             // Room is gone or user was removed
+            console.log('Room is no longer available, stopping polling');
             this.stopPolling();
             
             if (typeof chat !== 'undefined' && chat.handleRoomClosed) {
