@@ -105,6 +105,7 @@ public class MessageService {
         
         final LocalDateTime startTime = effectiveStartTime;
         final LocalDateTime finalUserJoinTime = userJoinTime;
+        final LocalDateTime sinceTime = sinceTimestamp;
         
         // Get messages and filter
         List<ChatMessage> messages = messageStore.getMessages(roomCode);
@@ -113,12 +114,17 @@ public class MessageService {
         }
         
         return messages.stream()
-                // Filter: only messages after the effective start time
-                .filter(msg -> msg.getTimestamp().isAfter(startTime))
                 // Filter: only non-expired messages
                 .filter(msg -> !msg.isExpired())
-                // Filter: only messages sent after user joined (double-check)
+                // Filter: only messages sent after user joined
                 .filter(msg -> msg.getTimestamp().isAfter(finalUserJoinTime) || msg.getTimestamp().isEqual(finalUserJoinTime))
+                // Filter: messages after start time OR messages modified after since time
+                .filter(msg -> {
+                    boolean isNew = msg.getTimestamp().isAfter(startTime);
+                    boolean isModified = sinceTime != null && msg.getLastModified() != null && 
+                                         msg.getLastModified().isAfter(sinceTime);
+                    return isNew || isModified;
+                })
                 .map(msg -> {
                     String senderName = room.getUserIdToName().get(msg.getUserId());
                     if (senderName == null) {
@@ -193,6 +199,91 @@ public class MessageService {
                 .type(message.getType().name())
                 .timestamp(message.getTimestamp())
                 .expiryTime(message.getExpiryTime())
+                .edited(message.isEdited())
+                .deleted(message.isDeleted())
+                .lastModified(message.getLastModified())
                 .build();
+    }
+    
+    /**
+     * Edit a message
+     */
+    public MessageResponseDto editMessage(String roomCode, String messageId, String userId, String newContent) {
+        // Validate room exists
+        ChatRoom room = roomStore.get(roomCode);
+        if (room == null || room.isExpired()) {
+            throw new RoomNotFoundException("Room not found or expired: " + roomCode);
+        }
+        
+        // Validate user is in room
+        if (!room.getActiveUserIds().contains(userId)) {
+            throw new UnauthorizedException("User is not a member of this room");
+        }
+        
+        // Get the message
+        ChatMessage message = messageStore.getMessage(roomCode, messageId);
+        if (message == null) {
+            throw new RoomNotFoundException("Message not found: " + messageId);
+        }
+        
+        // Validate user owns the message
+        if (!message.getUserId().equals(userId)) {
+            throw new UnauthorizedException("You can only edit your own messages");
+        }
+        
+        // Update the message
+        boolean updated = messageStore.updateMessage(roomCode, messageId, newContent);
+        if (!updated) {
+            throw new RoomNotFoundException("Failed to update message");
+        }
+        
+        // Get updated message
+        ChatMessage updatedMessage = messageStore.getMessage(roomCode, messageId);
+        String senderName = room.getUserIdToName().get(userId);
+        
+        log.debug("Message {} edited in room {} by user {}", messageId, roomCode, userId);
+        
+        return toMessageResponseDto(updatedMessage, senderName != null ? senderName : "Unknown");
+    }
+    
+    /**
+     * Unsend (soft delete) a message
+     */
+    public MessageResponseDto unsendMessage(String roomCode, String messageId, String userId) {
+        // Validate room exists
+        ChatRoom room = roomStore.get(roomCode);
+        if (room == null || room.isExpired()) {
+            throw new RoomNotFoundException("Room not found or expired: " + roomCode);
+        }
+        
+        // Validate user is in room
+        if (!room.getActiveUserIds().contains(userId)) {
+            throw new UnauthorizedException("User is not a member of this room");
+        }
+        
+        // Get the message
+        ChatMessage message = messageStore.getMessage(roomCode, messageId);
+        if (message == null) {
+            throw new RoomNotFoundException("Message not found: " + messageId);
+        }
+        
+        // Validate user owns the message
+        if (!message.getUserId().equals(userId)) {
+            throw new UnauthorizedException("You can only unsend your own messages");
+        }
+        
+        // Mark as deleted
+        boolean deleted = messageStore.markMessageDeleted(roomCode, messageId);
+        if (!deleted) {
+            throw new RoomNotFoundException("Failed to unsend message");
+        }
+        
+        // Get updated message
+        ChatMessage deletedMessage = messageStore.getMessage(roomCode, messageId);
+        String senderName = room.getUserIdToName().get(userId);
+        
+        log.debug("Message {} unsent in room {} by user {}", messageId, roomCode, userId);
+        
+        return toMessageResponseDto(deletedMessage, senderName != null ? senderName : "Unknown");
     }
 }

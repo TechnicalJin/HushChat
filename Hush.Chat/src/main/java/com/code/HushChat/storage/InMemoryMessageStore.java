@@ -45,6 +45,64 @@ public class InMemoryMessageStore {
         }
     }
     
+    /**
+     * Get a specific message by ID
+     */
+    public ChatMessage getMessage(String roomCode, String messageId) {
+        List<ChatMessage> messages = messageStore.get(roomCode);
+        if (messages == null) {
+            return null;
+        }
+        synchronized (messages) {
+            return messages.stream()
+                    .filter(msg -> msg.getMessageId().equals(messageId))
+                    .findFirst()
+                    .orElse(null);
+        }
+    }
+    
+    /**
+     * Update a message's content (for edit functionality)
+     */
+    public boolean updateMessage(String roomCode, String messageId, String newContent) {
+        List<ChatMessage> messages = messageStore.get(roomCode);
+        if (messages == null) {
+            return false;
+        }
+        synchronized (messages) {
+            for (ChatMessage msg : messages) {
+                if (msg.getMessageId().equals(messageId)) {
+                    msg.setContent(newContent);
+                    msg.setEdited(true);
+                    msg.setLastModified(java.time.LocalDateTime.now());
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Mark a message as deleted (soft delete for unsend)
+     */
+    public boolean markMessageDeleted(String roomCode, String messageId) {
+        List<ChatMessage> messages = messageStore.get(roomCode);
+        if (messages == null) {
+            return false;
+        }
+        synchronized (messages) {
+            for (ChatMessage msg : messages) {
+                if (msg.getMessageId().equals(messageId)) {
+                    msg.setDeleted(true);
+                    msg.setContent(""); // Clear content for privacy
+                    msg.setLastModified(java.time.LocalDateTime.now());
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
     public void deleteRoomMessages(String roomCode) {
         messageStore.remove(roomCode);
     }

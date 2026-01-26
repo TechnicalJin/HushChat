@@ -147,6 +147,56 @@ public class MessageController {
     }
     
     /**
+     * Edit a message
+     * PUT /api/messages/{roomCode}/{messageId}
+     */
+    @PutMapping("/{roomCode}/{messageId}")
+    public ResponseEntity<ApiResponse<MessageResponseDto>> editMessage(
+            @PathVariable String roomCode,
+            @PathVariable String messageId,
+            @RequestBody Map<String, String> body) {
+        
+        roomCode = roomCode.toUpperCase();
+        String userId = body.get("userId");
+        String content = body.get("content");
+        
+        if (userId == null || content == null) {
+            return ResponseEntity.badRequest().body(
+                    ApiResponse.error("userId and content are required")
+            );
+        }
+        
+        log.info("Editing message {} in room {} by user {}", messageId, roomCode, userId);
+        
+        MessageResponseDto message = messageService.editMessage(roomCode, messageId, userId, content);
+        
+        return ResponseEntity.ok(
+                ApiResponse.success("Message edited", message)
+        );
+    }
+    
+    /**
+     * Unsend (soft delete) a message
+     * DELETE /api/messages/{roomCode}/{messageId}
+     */
+    @DeleteMapping("/{roomCode}/{messageId}")
+    public ResponseEntity<ApiResponse<MessageResponseDto>> unsendMessage(
+            @PathVariable String roomCode,
+            @PathVariable String messageId,
+            @RequestParam String userId) {
+        
+        roomCode = roomCode.toUpperCase();
+        
+        log.info("Unsending message {} in room {} by user {}", messageId, roomCode, userId);
+        
+        MessageResponseDto message = messageService.unsendMessage(roomCode, messageId, userId);
+        
+        return ResponseEntity.ok(
+                ApiResponse.success("Message unsent", message)
+        );
+    }
+    
+    /**
      * Get message count for a room (for debugging/monitoring)
      * GET /api/messages/{roomCode}/count
      */

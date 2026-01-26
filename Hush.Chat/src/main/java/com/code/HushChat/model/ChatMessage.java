@@ -20,6 +20,9 @@ public class ChatMessage {
     private LocalDateTime timestamp;
     private LocalDateTime expiryTime;
     private String fileId; // Optional, for file messages
+    private boolean edited; // True if message was edited
+    private boolean deleted; // True if message was unsent/deleted
+    private LocalDateTime lastModified; // Track when message was last modified
     
     public enum MessageType {
         TEXT, FILE, SYSTEM

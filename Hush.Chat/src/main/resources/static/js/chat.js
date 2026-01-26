@@ -12,6 +12,11 @@ const chat = {
     expiryUpdateInterval: null,
     MESSAGE_TTL_MINUTES: 10, // Must match backend config
     
+    // Message actions state
+    activeContextMenu: null,
+    editingMessageId: null,
+    originalMessageContent: null,
+    
     /**
      * Initialize chat module
      */
@@ -65,6 +70,20 @@ const chat = {
                 this.autoGrowTextarea();
             });
         }
+        
+        // Close context menu on click outside or escape
+        document.addEventListener('click', (e) => {
+            if (this.activeContextMenu && !e.target.closest('.message-context-menu') && !e.target.closest('.message-action-btn')) {
+                this.closeContextMenu();
+            }
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeContextMenu();
+                this.cancelEdit();
+            }
+        });
     },
     
     /**
@@ -181,6 +200,12 @@ const chat = {
             return;
         }
         
+        // Check if we're in edit mode
+        if (this.editingMessageId) {
+            this.saveEditedMessage(this.editingMessageId, content);
+            return;
+        }
+        
         // Disable input while sending
         this.messageInput.disabled = true;
         
@@ -241,6 +266,7 @@ const chat = {
         
         const timestamp = new Date(message.timestamp);
         const timeString = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const editedIndicator = message.edited ? ' (edited)' : '';
         
         // Calculate initial remaining time
         const expiryTime = message.expiryTime ? new Date(message.expiryTime) : null;
@@ -272,19 +298,42 @@ const chat = {
         const contentId = `content-${message.messageId}`;
         const btnId = `btn-${message.messageId}`;
         
+        // Store original content for edit functionality
+        messageDiv.dataset.originalContent = message.content;
+        
         messageDiv.innerHTML = `
             <div class="message-header">
                 <span class="message-sender">${this.escapeHtml(message.senderName)}</span>
                 <div class="message-meta">
                     <span class="expiry-badge ${urgencyClass}">⏱ ${expiryDisplay}</span>
-                    <span class="message-time">${timeString}</span>
+                    <span class="message-time">${timeString}${editedIndicator}</span>
                 </div>
             </div>
-            <div id="${contentId}" class="${contentClasses}">${this.escapeHtml(message.content)}</div>
+            <div class="message-bubble-wrapper">
+                <div id="${contentId}" class="${contentClasses}">${this.escapeHtml(message.content)}</div>
+                ${isOwn ? `<button class="message-action-btn" data-message-id="${message.messageId}" title="Message options">▼</button>` : ''}
+            </div>
             ${isLongMessage ? `<button id="${btnId}" class="read-more-btn" data-content-id="${contentId}">Read More ▼</button>` : ''}
         `;
         
         this.messagesContainer.appendChild(messageDiv);
+        
+        // Attach action button click handler for own messages
+        if (isOwn) {
+            const actionBtn = messageDiv.querySelector('.message-action-btn');
+            if (actionBtn) {
+                actionBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.showContextMenu(e, message.messageId);
+                });
+            }
+            
+            // Right-click context menu for own messages
+            messageDiv.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                this.showContextMenu(e, message.messageId);
+            });
+        }
         
         // Attach click handler for Read More button
         if (isLongMessage) {
@@ -351,7 +400,16 @@ const chat = {
      */
     renderMessages(messages) {
         messages.forEach(msg => {
-            this.renderMessage(msg);
+            // Check if message already exists (for updates)
+            if (this.displayedMessageIds.has(msg.messageId)) {
+                // Update existing message if edited or deleted
+                this.updateExistingMessage(msg);
+            } else {
+                // Render new message (skip deleted ones)
+                if (!msg.deleted) {
+                    this.renderMessage(msg);
+                }
+            }
         });
     },
     
@@ -455,10 +513,267 @@ const chat = {
     },
     
     /**
+     * Show context menu for message actions
+     */
+    showContextMenu(event, messageId) {
+        // Close any existing menu
+        this.closeContextMenu();
+        
+        const menu = document.createElement('div');
+        menu.className = 'message-context-menu';
+        menu.innerHTML = `
+            <button class="context-menu-item" data-action="edit">
+                <span class="context-menu-icon">✏️</span>
+                <span>Edit Message</span>
+            </button>
+            <button class="context-menu-item context-menu-item-danger" data-action="unsend">
+                <span class="context-menu-icon">🗑️</span>
+                <span>Unsend Message</span>
+            </button>
+        `;
+        
+        document.body.appendChild(menu);
+        this.activeContextMenu = menu;
+        
+        // Position menu near the click/button
+        const menuWidth = 180;
+        const menuHeight = menu.offsetHeight || 80;
+        let x = event.clientX || event.pageX;
+        let y = event.clientY || event.pageY;
+        
+        // Adjust if menu goes off screen
+        if (x + menuWidth > window.innerWidth) {
+            x = window.innerWidth - menuWidth - 10;
+        }
+        if (y + menuHeight > window.innerHeight) {
+            y = window.innerHeight - menuHeight - 10;
+        }
+        
+        menu.style.left = x + 'px';
+        menu.style.top = y + 'px';
+        
+        // Add click handlers for menu items
+        menu.querySelectorAll('.context-menu-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const action = item.dataset.action;
+                this.handleMessageAction(action, messageId);
+                this.closeContextMenu();
+            });
+        });
+    },
+    
+    /**
+     * Close the context menu
+     */
+    closeContextMenu() {
+        if (this.activeContextMenu) {
+            this.activeContextMenu.remove();
+            this.activeContextMenu = null;
+        }
+    },
+    
+    /**
+     * Handle message action (edit or unsend)
+     */
+    handleMessageAction(action, messageId) {
+        if (action === 'edit') {
+            this.startEditMessage(messageId);
+        } else if (action === 'unsend') {
+            this.unsendMessage(messageId);
+        }
+    },
+    
+    /**
+     * Start editing a message
+     */
+    startEditMessage(messageId) {
+        const messageDiv = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+        if (!messageDiv) return;
+        
+        // Get original content from data attribute
+        const originalContent = messageDiv.dataset.originalContent;
+        if (!originalContent) return;
+        
+        // Store editing state
+        this.editingMessageId = messageId;
+        this.originalMessageContent = originalContent;
+        
+        // Load content into input box
+        this.messageInput.value = originalContent;
+        this.messageInput.focus();
+        this.autoGrowTextarea();
+        
+        // Change send button to save
+        const sendBtn = document.querySelector('.btn-send');
+        if (sendBtn) {
+            sendBtn.innerHTML = '<span>Save</span>';
+            sendBtn.classList.add('btn-editing');
+        }
+        
+        // Add cancel button if not exists
+        if (!document.querySelector('.btn-cancel-edit')) {
+            const cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.className = 'btn-cancel-edit';
+            cancelBtn.innerHTML = '✕';
+            cancelBtn.title = 'Cancel edit';
+            cancelBtn.addEventListener('click', () => this.cancelEdit());
+            this.messageForm.insertBefore(cancelBtn, sendBtn);
+        }
+        
+        // Highlight the message being edited
+        messageDiv.classList.add('message-editing');
+    },
+    
+    /**
+     * Cancel editing
+     */
+    cancelEdit() {
+        if (!this.editingMessageId) return;
+        
+        // Remove highlight from message
+        const messageDiv = this.messagesContainer.querySelector(`[data-message-id="${this.editingMessageId}"]`);
+        if (messageDiv) {
+            messageDiv.classList.remove('message-editing');
+        }
+        
+        // Clear input
+        this.messageInput.value = '';
+        this.messageInput.style.height = 'auto';
+        
+        // Restore send button
+        const sendBtn = document.querySelector('.btn-send');
+        if (sendBtn) {
+            sendBtn.innerHTML = '<span>Send</span>';
+            sendBtn.classList.remove('btn-editing');
+        }
+        
+        // Remove cancel button
+        const cancelBtn = document.querySelector('.btn-cancel-edit');
+        if (cancelBtn) {
+            cancelBtn.remove();
+        }
+        
+        // Clear editing state
+        this.editingMessageId = null;
+        this.originalMessageContent = null;
+    },
+    
+    /**
+     * Save edited message
+     */
+    async saveEditedMessage(messageId, newContent) {
+        const messageDiv = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+        if (!messageDiv) return;
+        
+        try {
+            // Call backend API to edit message
+            const response = await api.put(`/messages/${this.roomCode}/${messageId}`, {
+                userId: this.userId,
+                content: newContent
+            });
+            
+            if (response.success) {
+                // Update the message content in the DOM
+                const contentDiv = messageDiv.querySelector('.message-content');
+                if (contentDiv) {
+                    contentDiv.textContent = newContent;
+                }
+                
+                // Update the stored original content
+                messageDiv.dataset.originalContent = newContent;
+                
+                // Remove editing highlight
+                messageDiv.classList.remove('message-editing');
+                
+                // Add edited indicator if not exists
+                const timeSpan = messageDiv.querySelector('.message-time');
+                if (timeSpan && !timeSpan.textContent.includes('(edited)')) {
+                    timeSpan.textContent += ' (edited)';
+                }
+            } else {
+                this.showError('Failed to edit message');
+            }
+        } catch (error) {
+            console.error('Failed to edit message:', error);
+            this.showError('Failed to edit message. Please try again.');
+        }
+        
+        // Reset UI
+        this.cancelEdit();
+    },
+    
+    /**
+     * Unsend (remove) a message
+     */
+    async unsendMessage(messageId) {
+        const messageDiv = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+        if (!messageDiv) return;
+        
+        try {
+            // Call backend API to unsend message
+            const response = await api.delete(`/messages/${this.roomCode}/${messageId}?userId=${this.userId}`);
+            
+            if (response.success) {
+                // Add fade out animation
+                messageDiv.classList.add('message-unsending');
+                
+                // Remove after animation
+                setTimeout(() => {
+                    messageDiv.remove();
+                    this.displayedMessageIds.delete(messageId);
+                }, 300);
+            } else {
+                this.showError('Failed to unsend message');
+            }
+        } catch (error) {
+            console.error('Failed to unsend message:', error);
+            this.showError('Failed to unsend message. Please try again.');
+        }
+    },
+    
+    /**
+     * Update an existing message in the DOM (for sync from polling)
+     */
+    updateExistingMessage(message) {
+        const messageDiv = this.messagesContainer.querySelector(`[data-message-id="${message.messageId}"]`);
+        if (!messageDiv) return false;
+        
+        // Handle deleted messages
+        if (message.deleted) {
+            messageDiv.classList.add('message-unsending');
+            setTimeout(() => {
+                messageDiv.remove();
+                this.displayedMessageIds.delete(message.messageId);
+            }, 300);
+            return true;
+        }
+        
+        // Handle edited messages
+        if (message.edited) {
+            const contentDiv = messageDiv.querySelector('.message-content');
+            if (contentDiv && contentDiv.textContent !== message.content) {
+                contentDiv.textContent = message.content;
+                messageDiv.dataset.originalContent = message.content;
+                
+                // Add edited indicator if not exists
+                const timeSpan = messageDiv.querySelector('.message-time');
+                if (timeSpan && !timeSpan.textContent.includes('(edited)')) {
+                    timeSpan.textContent += ' (edited)';
+                }
+            }
+            return true;
+        }
+        
+        return false;
+    },
+    
+    /**
      * Cleanup on exit
      */
     cleanup() {
         this.stopExpiryCountdownUpdater();
+        this.closeContextMenu();
         localStorage.removeItem('roomCode');
         localStorage.removeItem('roomName');
         localStorage.removeItem('userId');

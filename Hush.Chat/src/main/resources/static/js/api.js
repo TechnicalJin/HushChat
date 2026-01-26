@@ -73,11 +73,35 @@ const api = {
     },
 
     /**
+     * Make PUT request
+     */
+    async put(endpoint, data, requiresAuth = false) {
+        try {
+            const headers = requiresAuth ? this.getAuthHeaders() : {
+                'Content-Type': 'application/json'
+            };
+
+            const response = await fetch(`${config.API_BASE_URL}${endpoint}`, {
+                method: 'PUT',
+                headers: headers,
+                body: JSON.stringify(data),
+                signal: AbortSignal.timeout(config.REQUEST_TIMEOUT)
+            });
+
+            return await this.handleResponse(response);
+        } catch (error) {
+            throw this.handleError(error);
+        }
+    },
+
+    /**
      * Make DELETE request
      */
-    async delete(endpoint, requiresAuth = true) {
+    async delete(endpoint, requiresAuth = false) {
         try {
-            const headers = this.getAuthHeaders();
+            const headers = requiresAuth ? this.getAuthHeaders() : {
+                'Content-Type': 'application/json'
+            };
 
             const response = await fetch(`${config.API_BASE_URL}${endpoint}`, {
                 method: 'DELETE',

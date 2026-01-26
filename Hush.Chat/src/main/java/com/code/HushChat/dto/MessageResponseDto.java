@@ -20,4 +20,7 @@ public class MessageResponseDto {
     private String type;
     private LocalDateTime timestamp;
     private LocalDateTime expiryTime;
+    private boolean edited;
+    private boolean deleted;
+    private LocalDateTime lastModified;
 }
