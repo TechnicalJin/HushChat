@@ -369,16 +369,37 @@ const chat = {
      * Render a single message
      */
     renderMessage(message, isOwn = null) {
-        // Prevent duplicate messages
-        if (this.displayedMessageIds.has(message.messageId)) {
-            return;
-        }
-        this.displayedMessageIds.add(message.messageId);
-        
         // Determine if message is from current user
         if (isOwn === null) {
             isOwn = message.senderId === this.userId;
         }
+        
+        // Handle FILE type messages - use fileId as the unique key
+        if (message.type === 'FILE' && message.fileId) {
+            const fileMessageKey = 'file_' + message.fileId;
+            if (this.displayedMessageIds.has(fileMessageKey)) {
+                return;
+            }
+            this.displayedMessageIds.add(fileMessageKey);
+            if (typeof fileHandler !== 'undefined') {
+                fileHandler.renderFileMessage({
+                    fileId: message.fileId,
+                    originalFilename: message.fileName,
+                    contentType: message.fileContentType,
+                    fileSize: message.fileSize,
+                    uploaderName: message.senderName,
+                    uploadTime: message.timestamp,
+                    expiryTime: message.expiryTime
+                }, isOwn);
+            }
+            return;
+        }
+        
+        // Prevent duplicate text messages
+        if (this.displayedMessageIds.has(message.messageId)) {
+            return;
+        }
+        this.displayedMessageIds.add(message.messageId);
         
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${isOwn ? 'message-own' : 'message-other'}`;
@@ -535,8 +556,13 @@ const chat = {
      */
     renderMessages(messages) {
         messages.forEach(msg => {
+            // Determine the correct key for this message
+            const messageKey = (msg.type === 'FILE' && msg.fileId) 
+                ? 'file_' + msg.fileId 
+                : msg.messageId;
+            
             // Check if message already exists (for updates)
-            if (this.displayedMessageIds.has(msg.messageId)) {
+            if (this.displayedMessageIds.has(messageKey)) {
                 // Update existing message if edited or deleted
                 this.updateExistingMessage(msg);
             } else {

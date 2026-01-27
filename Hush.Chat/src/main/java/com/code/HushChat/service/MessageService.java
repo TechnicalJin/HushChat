@@ -6,6 +6,8 @@ import com.code.HushChat.exception.RoomNotFoundException;
 import com.code.HushChat.exception.UnauthorizedException;
 import com.code.HushChat.model.ChatMessage;
 import com.code.HushChat.model.ChatRoom;
+import com.code.HushChat.model.FileMetadata;
+import com.code.HushChat.storage.InMemoryFileStore;
 import com.code.HushChat.storage.InMemoryMessageStore;
 import com.code.HushChat.storage.InMemoryRoomStore;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ public class MessageService {
     
     private final InMemoryMessageStore messageStore;
     private final InMemoryRoomStore roomStore;
+    private final InMemoryFileStore fileStore;
     private final RoomService roomService;
     private final AppConfig appConfig;
     
@@ -75,6 +78,78 @@ public class MessageService {
     }
     
     /**
+     * Send a file message to a room
+     */
+    public MessageResponseDto sendFileMessage(String roomCode, String userId, String fileId, 
+                                               String fileName, String contentType, long fileSize) {
+        // Validate room exists
+        ChatRoom room = roomStore.get(roomCode);
+        if (room == null || room.isExpired()) {
+            throw new RoomNotFoundException("Room not found or expired: " + roomCode);
+        }
+        
+        // Validate user is in room
+        if (!room.getActiveUserIds().contains(userId)) {
+            throw new UnauthorizedException("User is not a member of this room");
+        }
+        
+        // Get sender name
+        String senderName = room.getUserIdToName().get(userId);
+        if (senderName == null) {
+            senderName = "Unknown";
+        }
+        
+        // Create file message with TTL
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime expiryTime = now.plusMinutes(appConfig.getMessage().getTtlMinutes());
+        
+        // Content shows file info for display
+        String content = "[File: " + fileName + "]";
+        
+        ChatMessage message = ChatMessage.builder()
+                .messageId(UUID.randomUUID().toString())
+                .roomCode(roomCode)
+                .userId(userId)
+                .content(content)
+                .type(ChatMessage.MessageType.FILE)
+                .fileId(fileId)
+                .fileName(fileName)
+                .fileContentType(contentType)
+                .fileSize(fileSize)
+                .timestamp(now)
+                .expiryTime(expiryTime)
+                .build();
+        
+        // Save message
+        messageStore.save(roomCode, message);
+        
+        // Update room activity
+        roomService.updateRoomActivity(roomCode);
+        
+        log.debug("File message sent in room {} by user {}, fileId: {}", roomCode, userId, fileId);
+        
+        // Build response with file info
+        return MessageResponseDto.builder()
+                .messageId(message.getMessageId())
+                .roomCode(message.getRoomCode())
+                .senderId(message.getUserId())
+                .senderName(senderName)
+                .content(message.getContent())
+                .type(message.getType().name())
+                .timestamp(message.getTimestamp())
+                .expiryTime(message.getExpiryTime())
+                .edited(message.isEdited())
+                .deleted(message.isDeleted())
+                .lastModified(message.getLastModified())
+                .fileId(fileId)
+                .fileName(fileName)
+                .fileContentType(contentType)
+                .fileSize(fileSize)
+                .fileDownloadUrl("/api/files/download/" + fileId)
+                .build();
+    }
+    
+    /**
      * Get messages since a given timestamp, respecting user join time
      * Late joiners will NOT see messages sent before they joined
      */
@@ -120,7 +195,9 @@ public class MessageService {
                 .filter(msg -> msg.getTimestamp().isAfter(finalUserJoinTime) || msg.getTimestamp().isEqual(finalUserJoinTime))
                 // Filter: messages after start time OR messages modified after since time
                 .filter(msg -> {
-                    boolean isNew = msg.getTimestamp().isAfter(startTime);
+                    // Inclusive boundary is important because the client sends `since` rounded to seconds.
+                    // Without this, messages created in the same second as `since` can be dropped.
+                    boolean isNew = !msg.getTimestamp().isBefore(startTime);
                     boolean isModified = sinceTime != null && msg.getLastModified() != null && 
                                          msg.getLastModified().isAfter(sinceTime);
                     return isNew || isModified;
@@ -190,7 +267,7 @@ public class MessageService {
      * Convert ChatMessage to MessageResponseDto
      */
     private MessageResponseDto toMessageResponseDto(ChatMessage message, String senderName) {
-        return MessageResponseDto.builder()
+        MessageResponseDto.MessageResponseDtoBuilder builder = MessageResponseDto.builder()
                 .messageId(message.getMessageId())
                 .roomCode(message.getRoomCode())
                 .senderId(message.getUserId())
@@ -201,8 +278,41 @@ public class MessageService {
                 .expiryTime(message.getExpiryTime())
                 .edited(message.isEdited())
                 .deleted(message.isDeleted())
-                .lastModified(message.getLastModified())
-                .build();
+                .lastModified(message.getLastModified());
+        
+        // Add file info for FILE type messages
+        if (message.getType() == ChatMessage.MessageType.FILE && message.getFileId() != null) {
+            String fileId = message.getFileId();
+            builder.fileId(fileId)
+                   .fileDownloadUrl("/api/files/download/" + fileId);
+            
+            // Use file info stored directly in the message (most reliable)
+            if (message.getFileName() != null) {
+                builder.fileName(message.getFileName())
+                       .fileContentType(message.getFileContentType() != null ? message.getFileContentType() : "application/octet-stream")
+                       .fileSize(message.getFileSize() != null ? message.getFileSize() : 0L);
+            } else {
+                // Fallback: try to get from file store
+                FileMetadata fileMetadata = fileStore.get(fileId);
+                if (fileMetadata != null) {
+                    builder.fileName(fileMetadata.getOriginalFilename())
+                           .fileContentType(fileMetadata.getContentType())
+                           .fileSize(fileMetadata.getFileSize());
+                } else {
+                    // Last resort: extract filename from message content
+                    String content = message.getContent();
+                    if (content != null && content.startsWith("[File: ") && content.endsWith("]")) {
+                        builder.fileName(content.substring(7, content.length() - 1));
+                    } else {
+                        builder.fileName("Unknown file");
+                    }
+                    builder.fileContentType("application/octet-stream")
+                           .fileSize(0L);
+                }
+            }
+        }
+        
+        return builder.build();
     }
     
     /**
@@ -270,6 +380,22 @@ public class MessageService {
         // Validate user owns the message
         if (!message.getUserId().equals(userId)) {
             throw new UnauthorizedException("You can only unsend your own messages");
+        }
+        
+        // If this is a file message, delete the associated file
+        if (message.getType() == ChatMessage.MessageType.FILE && message.getFileId() != null) {
+            FileMetadata fileMetadata = fileStore.get(message.getFileId());
+            if (fileMetadata != null) {
+                // Delete file from disk
+                try {
+                    java.nio.file.Files.deleteIfExists(java.nio.file.Paths.get(fileMetadata.getFilePath()));
+                } catch (Exception e) {
+                    log.warn("Failed to delete file from disk during unsend: {}", e.getMessage());
+                }
+                // Remove file metadata
+                fileStore.delete(message.getFileId());
+                log.debug("File {} deleted during message unsend", message.getFileId());
+            }
         }
         
         // Mark as deleted

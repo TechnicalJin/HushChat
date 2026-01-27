@@ -25,7 +25,7 @@ const config = {
 
     // File Upload Settings
     MAX_FILE_SIZE_MB: 200,
-    ALLOWED_FILE_TYPES: ['jpg', 'jpeg', 'png', 'pdf', 'txt', 'docx', 'xlsx'],
+    ALLOWED_FILE_TYPES: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'ico', 'svg', 'pdf', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'rtf', 'csv', 'json', 'xml', 'html', 'css', 'js', 'ts', 'java', 'py', 'c', 'cpp', 'h', 'hpp', 'cs', 'go', 'rs', 'rb', 'php', 'sql', 'sh', 'bat', 'ps1', 'md', 'yaml', 'yml', 'ini', 'cfg', 'conf', 'log', 'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'mp3', 'mp4', 'mov', 'avi', 'mkv', 'webm', 'wav', 'flac', 'ogg', 'aac', 'm4a', 'wma'],
 
     // Storage Keys
     STORAGE_KEYS: {

@@ -39,6 +39,9 @@
     <!-- Message Input -->
     <footer class="message-input-container">
         <form id="messageForm" class="message-form">
+            <button type="button" id="filePickerBtn" class="btn-file-picker" title="Attach files">
+                <span>📎</span>
+            </button>
             <textarea
                     id="messageInput"
                     placeholder="Type your message... (Shift+Enter for new line)"
@@ -72,6 +75,7 @@
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/utils.js"></script>
+<script src="js/file.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/polling.js"></script>
 <script>
@@ -130,6 +134,13 @@
     loadRoomInfo();
     // Refresh room info every 10 seconds
     roomInfoInterval = setInterval(loadRoomInfo, 10000);
+
+    // File Picker Button
+    document.getElementById('filePickerBtn').addEventListener('click', () => {
+        if (typeof fileHandler !== 'undefined') {
+            fileHandler.openFilePicker();
+        }
+    });
 
     // Leave Room
     document.getElementById('leaveRoomBtn').addEventListener('click', () => {

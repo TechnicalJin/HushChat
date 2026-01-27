@@ -23,4 +23,11 @@ public class MessageResponseDto {
     private boolean edited;
     private boolean deleted;
     private LocalDateTime lastModified;
+    
+    // File-related fields (only populated for FILE type messages)
+    private String fileId;
+    private String fileName;
+    private String fileContentType;
+    private Long fileSize;
+    private String fileDownloadUrl;
 }
