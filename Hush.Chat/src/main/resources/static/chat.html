@@ -39,17 +39,32 @@
     <!-- Message Input -->
     <footer class="message-input-container">
         <form id="messageForm" class="message-form">
-            <textarea
-                    id="messageInput"
-                    placeholder="Type your message... (Shift+Enter for new line)"
-                    maxlength="5000"
-                    autocomplete="off"
-                    rows="1"
-                    required
-            ></textarea>
-            <button type="submit" class="btn-send">
-                <span>Send</span>
-            </button>
+            <div class="message-input-row">
+                <button type="button" id="filePickerBtn" class="btn-icon" title="Attach file">
+                    📎
+                </button>
+                <input
+                        type="file"
+                        id="fileInput"
+                        style="display: none;"
+                        accept=".jpg,.jpeg,.png,.pdf,.txt,.docx,.xlsx"
+                />
+                <textarea
+                        id="messageInput"
+                        placeholder="Type your message... (Shift+Enter for new line)"
+                        maxlength="5000"
+                        autocomplete="off"
+                        rows="1"
+                        required
+                ></textarea>
+                <button type="submit" class="btn-send">
+                    <span>Send</span>
+                </button>
+            </div>
+            <div id="fileUploadStatus" class="file-upload-status" style="display: none;">
+                <span id="fileUploadName"></span>
+                <span id="fileUploadProgress"></span>
+            </div>
         </form>
         <div class="input-info">
             <span id="userName"></span>

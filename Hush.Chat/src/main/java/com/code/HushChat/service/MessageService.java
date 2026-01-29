@@ -197,6 +197,7 @@ public class MessageService {
                 .senderName(senderName)
                 .content(message.getContent())
                 .type(message.getType().name())
+                .fileId(message.getFileId())
                 .timestamp(message.getTimestamp())
                 .expiryTime(message.getExpiryTime())
                 .edited(message.isEdited())

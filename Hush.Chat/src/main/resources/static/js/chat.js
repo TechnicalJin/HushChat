@@ -66,6 +66,22 @@ const chat = {
                 this.sendMessage();
             });
         }
+
+        // File picker button
+        const filePickerBtn = document.getElementById('filePickerBtn');
+        const fileInput = document.getElementById('fileInput');
+        if (filePickerBtn && fileInput) {
+            filePickerBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    this.handleFileSelected(file);
+                }
+            });
+        }
         
         // Handle Enter key for send, SHIFT+ENTER for new line
         if (this.messageInput) {
@@ -320,7 +336,8 @@ const chat = {
      */
     async sendMessage() {
         const content = this.messageInput.value.trim();
-        
+
+        // If no text but a file is selected, let file handler send
         if (!content) {
             return;
         }
@@ -364,6 +381,86 @@ const chat = {
             this.messageInput.focus();
         }
     },
+
+    /**
+     * Handle file selection and upload
+     */
+    async handleFileSelected(file) {
+        // Validate type
+        if (!isFileTypeAllowed(file.name)) {
+            this.showError('File type not allowed.');
+            return;
+        }
+
+        // Validate size
+        const sizeMb = file.size / (1024 * 1024);
+        if (sizeMb > config.MAX_FILE_SIZE_MB) {
+            this.showError(`File too large. Max ${config.MAX_FILE_SIZE_MB}MB allowed.`);
+            return;
+        }
+
+        const statusEl = document.getElementById('fileUploadStatus');
+        const nameEl = document.getElementById('fileUploadName');
+        const progressEl = document.getElementById('fileUploadProgress');
+
+        if (statusEl && nameEl && progressEl) {
+            statusEl.style.display = 'flex';
+            nameEl.textContent = `${file.name} (${formatFileSize(file.size)})`;
+            progressEl.textContent = 'Uploading...';
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('roomCode', this.roomCode);
+            formData.append('userId', this.userId);
+            formData.append('senderName', this.userName);
+            formData.append('file', file);
+
+            const response = await api.uploadFile('/files/upload', formData);
+
+            if (response.success) {
+                // Render as a file message
+                const data = response.data;
+                const message = {
+                    messageId: data.fileId,
+                    roomCode: data.roomCode,
+                    senderId: data.senderId,
+                    senderName: data.senderName,
+                    content: data.originalFilename,
+                    type: 'FILE',
+                    timestamp: data.uploadTime,
+                    expiryTime: data.expiryTime,
+                    edited: false,
+                    deleted: false,
+                    lastModified: data.uploadTime,
+                    downloadUrl: data.downloadUrl,
+                    fileSize: data.fileSize,
+                    contentType: data.contentType
+                };
+                this.renderMessage(message, true);
+                if (progressEl) {
+                    progressEl.textContent = 'Uploaded';
+                }
+            } else {
+                throw new Error(response.error || 'Failed to upload file');
+            }
+        } catch (error) {
+            console.error('Failed to upload file:', error);
+            this.showError(error.message || 'Failed to upload file.');
+        } finally {
+            // Reset input
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput) {
+                fileInput.value = '';
+            }
+            // Hide status after short delay
+            if (statusEl) {
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                }, 1500);
+            }
+        }
+    },
     
     /**
      * Render a single message
@@ -381,7 +478,8 @@ const chat = {
         }
         
         const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${isOwn ? 'message-own' : 'message-other'}`;
+        const isFile = message.type === 'FILE';
+        messageDiv.className = `message ${isOwn ? 'message-own' : 'message-other'} ${isFile ? 'message-file' : ''}`;
         messageDiv.dataset.messageId = message.messageId;
         
         // Store expiry time for countdown
@@ -410,9 +508,9 @@ const chat = {
         }
         
         // Check if content looks like code (SQL, scripts, etc.)
-        const isCodeContent = this.isCodeLikeContent(message.content);
-        const lineCount = (message.content.match(/\n/g) || []).length;
-        const isLongMessage = lineCount > 5 || message.content.length > 300;
+        const isCodeContent = !isFile && this.isCodeLikeContent(message.content);
+        const lineCount = isFile ? 1 : (message.content.match(/\n/g) || []).length;
+        const isLongMessage = !isFile && (lineCount > 5 || message.content.length > 300);
         
         // Build content classes
         let contentClasses = 'message-content';
@@ -426,6 +524,28 @@ const chat = {
         // Store original content for edit functionality
         messageDiv.dataset.originalContent = message.content;
         
+        let bodyHtml;
+        if (isFile) {
+            const fileLabel = this.escapeHtml(message.content);
+            const fileSizeLabel = message.fileSize ? ` (${formatFileSize(message.fileSize)})` : '';
+            const downloadUrl = message.downloadUrl || `${config.API_BASE_URL}/files/${message.fileId || message.messageId}/download`;
+            bodyHtml = `
+                <div id="${contentId}" class="${contentClasses} file-message-content">
+                    <div class="file-icon">📎</div>
+                    <div class="file-info">
+                        <a href="${downloadUrl}" class="file-name" target="_blank" rel="noopener noreferrer">
+                            ${fileLabel}
+                        </a>
+                        <div class="file-meta-text">
+                            <span>${fileSizeLabel}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            bodyHtml = `<div id="${contentId}" class="${contentClasses}">${this.escapeHtml(message.content)}</div>`;
+        }
+
         messageDiv.innerHTML = `
             <div class="message-header">
                 <span class="message-sender">${this.escapeHtml(message.senderName)}</span>
@@ -435,8 +555,8 @@ const chat = {
                 </div>
             </div>
             <div class="message-bubble-wrapper">
-                <div id="${contentId}" class="${contentClasses}">${this.escapeHtml(message.content)}</div>
-                ${isOwn ? `<button class="message-action-btn" data-message-id="${message.messageId}" title="Message options">▼</button>` : ''}
+                ${bodyHtml}
+                ${isOwn && !isFile ? `<button class="message-action-btn" data-message-id="${message.messageId}" title="Message options">▼</button>` : ''}
             </div>
             ${isLongMessage ? `<button id="${btnId}" class="read-more-btn" data-content-id="${contentId}">Read More ▼</button>` : ''}
         `;
