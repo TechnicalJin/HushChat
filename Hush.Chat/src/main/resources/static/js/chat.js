@@ -561,18 +561,15 @@ const chat = {
         const senderHeaderHtml = showSenderName
             ? `<div class="message-header">
                     <span class="message-sender">${this.escapeHtml(message.senderName)}</span>
-                    <div class="message-meta">
-                        <span class="expiry-badge ${urgencyClass}">⏱ ${expiryDisplay}</span>
-                        <span class="message-time">${timeString}${editedIndicator}</span>
-                    </div>
                </div>`
-            : `<div class="message-header">
-                    <span class="message-sender"></span>
-                    <div class="message-meta">
-                        <span class="expiry-badge ${urgencyClass}">⏱ ${expiryDisplay}</span>
-                        <span class="message-time">${timeString}${editedIndicator}</span>
-                    </div>
-               </div>`;
+            : '';
+
+        const footerHtml = `
+            <div class="message-footer ${isOwn ? 'message-footer-own' : 'message-footer-other'}">
+                <span class="expiry-badge ${urgencyClass}">⏱ ${expiryDisplay}</span>
+                <span class="message-time">${timeString}${editedIndicator}</span>
+            </div>
+        `;
 
         messageDiv.innerHTML = `
             ${senderHeaderHtml}
@@ -581,6 +578,7 @@ const chat = {
                 ${isOwn && !isFile ? `<button class="message-action-btn" data-message-id="${message.messageId}" title="Message options">▼</button>` : ''}
             </div>
             ${isLongMessage ? `<button id="${btnId}" class="read-more-btn" data-content-id="${contentId}">Read More ▼</button>` : ''}
+            ${footerHtml}
         `;
         
         this.messagesContainer.appendChild(messageDiv);

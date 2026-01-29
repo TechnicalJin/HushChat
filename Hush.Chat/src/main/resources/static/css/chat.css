@@ -84,6 +84,7 @@ body {
 .messages-container {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 24px;
     background: var(--background-dark);
 }
@@ -116,8 +117,8 @@ body {
 /* Message Bubbles */
 .message {
     margin-bottom: 16px;
-    max-width: 80%;
-    min-width: 150px;
+    max-width: 72%;
+    min-width: 140px;
     animation: fadeIn 0.3s ease;
 }
 
@@ -131,9 +132,14 @@ body {
 
 .message-header {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 6px;
+    justify-content: flex-start;
+    margin-bottom: 4px;
     font-size: 0.8rem;
+}
+
+.message-own .message-header {
+    justify-content: flex-end;
+    text-align: right;
 }
 
 .message-sender {
@@ -206,6 +212,12 @@ body {
 
 .message-own .read-more-btn {
     color: rgba(255, 255, 255, 0.9);
+    text-align: right;
+    margin-left: auto;
+}
+
+.message-other .read-more-btn {
+    margin-right: auto;
 }
 
 /* Code-like content styling - applied via JS when message contains code patterns */
@@ -319,6 +331,30 @@ body {
 
 .message-form textarea::placeholder {
     color: var(--text-secondary);
+}
+
+/* Dark, subtle scrollbar for textarea */
+.message-form textarea::-webkit-scrollbar {
+    width: 6px;
+}
+
+.message-form textarea::-webkit-scrollbar-track {
+    background: #020617;
+    border-radius: 999px;
+}
+
+.message-form textarea::-webkit-scrollbar-thumb {
+    background: #1f2937;
+    border-radius: 999px;
+}
+
+.message-form textarea::-webkit-scrollbar-thumb:hover {
+    background: #4b5563;
+}
+
+.message-form textarea {
+    scrollbar-width: thin;
+    scrollbar-color: #1f2937 #020617;
 }
 
 .btn-send {
@@ -506,6 +542,23 @@ body {
     animation: pulse 1s ease-in-out infinite;
 }
 
+/* Message footer for timestamp & expiry under bubble */
+.message-footer {
+    display: flex;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    gap: 6px;
+}
+
+.message-footer-own {
+    justify-content: flex-end;
+}
+
+.message-footer-other {
+    justify-content: flex-start;
+}
+
 /* Message Expiring Animation */
 .message-expiring {
     animation: fadeOut 0.5s ease forwards;
@@ -651,8 +704,9 @@ body {
 /* Message Action Button (hover icon) */
 .message-action-btn {
     position: absolute;
-    top: 4px;
-    right: -28px;
+    top: 50%;
+    right: -24px;
+    transform: translateY(-50%);
     width: 24px;
     height: 24px;
     background: var(--surface-color);
@@ -669,12 +723,18 @@ body {
     z-index: 10;
 }
 
-.message-own .message-action-btn {
+/* Attach arrow to same side as bubble */
+.message-other .message-action-btn {
+    left: -24px;
     right: auto;
-    left: -28px;
 }
 
-.message-own:hover .message-action-btn {
+.message-own .message-action-btn {
+    right: -30px;
+    left: auto;
+}
+
+.message:hover .message-action-btn {
     opacity: 1;
 }
 
@@ -809,7 +869,7 @@ body {
     }
 
     .message {
-        max-width: 85%;
+        max-width: 88%;
     }
 
     .message-input-container {
@@ -824,17 +884,19 @@ body {
         content: '➤';
     }
 
-    /* Mobile: always show action button */
-    .message-own .message-action-btn {
+    /* Mobile: always show action button a bit closer to bubble */
+    .message-own .message-action-btn,
+    .message-other .message-action-btn {
         opacity: 0.7;
     }
-    
+
     .message-action-btn {
-        right: -24px;
+        right: -18px;
     }
-    
-    .message-own .message-action-btn {
-        left: -24px;
+
+    .message-other .message-action-btn {
+        left: -18px;
+        right: auto;
     }
 }
 
