@@ -196,25 +196,25 @@ const polling = {
         const params = new URLSearchParams();
         params.append('userId', this.userId);
         params.append('timeout', this.longPollTimeoutSec.toString());
-        
+
         if (this.lastMessageTime) {
             params.append('since', this.formatTimestamp(this.lastMessageTime));
         }
-        
+
         const response = await api.get(
             `/messages/${this.roomCode}/poll?${params.toString()}`,
             false  // No auth required
         );
-        
+
         if (response.success && response.data) {
             this.processMessages(response.data.messages || []);
-            
+
             // Update last message time from server
             if (response.data.serverTime) {
                 this.updateLastMessageTime(response.data.serverTime);
             }
         }
-        
+
         return response.data?.messages || [];
     },
     
@@ -225,14 +225,14 @@ const polling = {
         if (!messages || messages.length === 0) {
             return;
         }
-        
+
         console.log(`Received ${messages.length} new message(s)`);
-        
+
         // Render messages (chat module handles deduplication)
         if (typeof chat !== 'undefined' && chat.renderMessages) {
             chat.renderMessages(messages);
         }
-        
+
         // Update last message time to the latest message timestamp
         const latestMessage = messages[messages.length - 1];
         if (latestMessage && latestMessage.timestamp) {
@@ -256,19 +256,19 @@ const polling = {
         if (!timestamp) {
             return '';
         }
-        
+
         try {
             // If it's already in ISO format without milliseconds, use it
             if (timestamp.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)) {
                 return timestamp;
             }
-            
+
             // Parse and format to ISO without timezone
             const date = new Date(timestamp);
             if (isNaN(date.getTime())) {
                 return timestamp;
             }
-            
+
             // Format as: YYYY-MM-DDTHH:MM:SS (LocalDateTime format)
             return date.getFullYear() + '-' +
                 String(date.getMonth() + 1).padStart(2, '0') + '-' +

@@ -556,13 +556,8 @@ const chat = {
      */
     renderMessages(messages) {
         messages.forEach(msg => {
-            // Determine the correct key for this message
-            const messageKey = (msg.type === 'FILE' && msg.fileId) 
-                ? 'file_' + msg.fileId 
-                : msg.messageId;
-            
             // Check if message already exists (for updates)
-            if (this.displayedMessageIds.has(messageKey)) {
+            if (this.displayedMessageIds.has(msg.messageId)) {
                 // Update existing message if edited or deleted
                 this.updateExistingMessage(msg);
             } else {
@@ -920,7 +915,7 @@ const chat = {
     updateExistingMessage(message) {
         const messageDiv = this.messagesContainer.querySelector(`[data-message-id="${message.messageId}"]`);
         if (!messageDiv) return false;
-        
+
         // Handle deleted messages
         if (message.deleted) {
             messageDiv.classList.add('message-unsending');
@@ -930,14 +925,14 @@ const chat = {
             }, 300);
             return true;
         }
-        
+
         // Handle edited messages
         if (message.edited) {
             const contentDiv = messageDiv.querySelector('.message-content');
             if (contentDiv && contentDiv.textContent !== message.content) {
                 contentDiv.textContent = message.content;
                 messageDiv.dataset.originalContent = message.content;
-                
+
                 // Add edited indicator if not exists
                 const timeSpan = messageDiv.querySelector('.message-time');
                 if (timeSpan && !timeSpan.textContent.includes('(edited)')) {
@@ -946,7 +941,7 @@ const chat = {
             }
             return true;
         }
-        
+
         return false;
     },
     

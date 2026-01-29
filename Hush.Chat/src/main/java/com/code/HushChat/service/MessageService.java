@@ -113,9 +113,6 @@ public class MessageService {
                 .content(content)
                 .type(ChatMessage.MessageType.FILE)
                 .fileId(fileId)
-                .fileName(fileName)
-                .fileContentType(contentType)
-                .fileSize(fileSize)
                 .timestamp(now)
                 .expiryTime(expiryTime)
                 .build();
@@ -159,35 +156,35 @@ public class MessageService {
         if (room == null) {
             throw new RoomNotFoundException("Room not found: " + roomCode);
         }
-        
+
         // Validate user is in room
         if (!room.getActiveUserIds().contains(userId)) {
             throw new UnauthorizedException("User is not a member of this room");
         }
-        
+
         // Get user join time - this is the privacy boundary
         LocalDateTime userJoinTime = roomStore.getUserJoinTime(roomCode, userId);
         if (userJoinTime == null) {
             // User join time not recorded, default to now (no history)
             userJoinTime = LocalDateTime.now();
         }
-        
+
         // Determine the effective start time (max of sinceTimestamp and userJoinTime)
         LocalDateTime effectiveStartTime = sinceTimestamp;
         if (effectiveStartTime == null || effectiveStartTime.isBefore(userJoinTime)) {
             effectiveStartTime = userJoinTime;
         }
-        
+
         final LocalDateTime startTime = effectiveStartTime;
         final LocalDateTime finalUserJoinTime = userJoinTime;
         final LocalDateTime sinceTime = sinceTimestamp;
-        
+
         // Get messages and filter
         List<ChatMessage> messages = messageStore.getMessages(roomCode);
         if (messages == null || messages.isEmpty()) {
             return Collections.emptyList();
         }
-        
+
         return messages.stream()
                 // Filter: only non-expired messages
                 .filter(msg -> !msg.isExpired())
@@ -195,10 +192,8 @@ public class MessageService {
                 .filter(msg -> msg.getTimestamp().isAfter(finalUserJoinTime) || msg.getTimestamp().isEqual(finalUserJoinTime))
                 // Filter: messages after start time OR messages modified after since time
                 .filter(msg -> {
-                    // Inclusive boundary is important because the client sends `since` rounded to seconds.
-                    // Without this, messages created in the same second as `since` can be dropped.
-                    boolean isNew = !msg.getTimestamp().isBefore(startTime);
-                    boolean isModified = sinceTime != null && msg.getLastModified() != null && 
+                    boolean isNew = msg.getTimestamp().isAfter(startTime);
+                    boolean isModified = sinceTime != null && msg.getLastModified() != null &&
                                          msg.getLastModified().isAfter(sinceTime);
                     return isNew || isModified;
                 })
@@ -279,42 +274,22 @@ public class MessageService {
                 .edited(message.isEdited())
                 .deleted(message.isDeleted())
                 .lastModified(message.getLastModified());
-        
+
         // Add file info for FILE type messages
         if (message.getType() == ChatMessage.MessageType.FILE && message.getFileId() != null) {
-            String fileId = message.getFileId();
-            builder.fileId(fileId)
-                   .fileDownloadUrl("/api/files/download/" + fileId);
-            
-            // Use file info stored directly in the message (most reliable)
-            if (message.getFileName() != null) {
-                builder.fileName(message.getFileName())
-                       .fileContentType(message.getFileContentType() != null ? message.getFileContentType() : "application/octet-stream")
-                       .fileSize(message.getFileSize() != null ? message.getFileSize() : 0L);
-            } else {
-                // Fallback: try to get from file store
-                FileMetadata fileMetadata = fileStore.get(fileId);
-                if (fileMetadata != null) {
-                    builder.fileName(fileMetadata.getOriginalFilename())
-                           .fileContentType(fileMetadata.getContentType())
-                           .fileSize(fileMetadata.getFileSize());
-                } else {
-                    // Last resort: extract filename from message content
-                    String content = message.getContent();
-                    if (content != null && content.startsWith("[File: ") && content.endsWith("]")) {
-                        builder.fileName(content.substring(7, content.length() - 1));
-                    } else {
-                        builder.fileName("Unknown file");
-                    }
-                    builder.fileContentType("application/octet-stream")
-                           .fileSize(0L);
-                }
+            FileMetadata fileMetadata = fileStore.get(message.getFileId());
+            if (fileMetadata != null) {
+                builder.fileId(fileMetadata.getFileId())
+                       .fileName(fileMetadata.getOriginalFilename())
+                       .fileContentType(fileMetadata.getContentType())
+                       .fileSize(fileMetadata.getFileSize())
+                       .fileDownloadUrl("/api/files/download/" + fileMetadata.getFileId());
             }
         }
-        
+
         return builder.build();
     }
-    
+
     /**
      * Edit a message
      */

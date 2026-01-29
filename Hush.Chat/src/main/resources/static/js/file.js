@@ -223,7 +223,7 @@ const fileHandler = {
         } finally {
             this.hideUploadProgress();
             this.isUploading = false;
-            
+
             // Process queued files
             if (this.uploadQueue.length > 0) {
                 const queuedFiles = this.uploadQueue.splice(0);
@@ -231,21 +231,21 @@ const fileHandler = {
             }
         }
     },
-    
+
     /**
      * Upload with progress tracking
      */
     async uploadWithProgress(formData) {
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
-            
+
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
                     const percent = Math.round((e.loaded / e.total) * 100);
                     this.updateUploadProgress(percent);
                 }
             });
-            
+
             xhr.addEventListener('load', () => {
                 if (xhr.status >= 200 && xhr.status < 300) {
                     try {
@@ -262,28 +262,28 @@ const fileHandler = {
                     }
                 }
             });
-            
+
             xhr.addEventListener('error', () => {
                 reject(new Error('Network error'));
             });
-            
+
             xhr.addEventListener('timeout', () => {
                 reject(new Error('Upload timed out'));
             });
-            
+
             xhr.open('POST', `${config.API_BASE_URL}/files/upload`);
             xhr.timeout = 5 * 60 * 1000; // 5 minutes for large files
             xhr.send(formData);
         });
     },
-    
+
     /**
      * Show upload progress UI
      */
     showUploadProgress(fileCount) {
         // Remove existing progress if any
         this.hideUploadProgress();
-        
+
         const progressHtml = `
             <div id="uploadProgressContainer" class="upload-progress-container">
                 <div class="upload-progress-bar">
@@ -294,20 +294,20 @@ const fileHandler = {
                 </span>
             </div>
         `;
-        
+
         const inputContainer = document.querySelector('.message-input-container');
         if (inputContainer) {
             inputContainer.insertAdjacentHTML('beforebegin', progressHtml);
         }
     },
-    
+
     /**
      * Update upload progress
      */
     updateUploadProgress(percent) {
         const fill = document.getElementById('uploadProgressFill');
         const text = document.getElementById('uploadProgressText');
-        
+
         if (fill) {
             fill.style.width = percent + '%';
         }
@@ -315,7 +315,7 @@ const fileHandler = {
             text.textContent = `Uploading... ${percent}%`;
         }
     },
-    
+
     /**
      * Hide upload progress UI
      */
@@ -325,16 +325,16 @@ const fileHandler = {
             container.remove();
         }
     },
-    
+
     /**
      * Render a file message in chat
      */
     renderFileMessage(fileData, isOwn = false) {
         if (!fileData) return;
-        
+
         const messagesContainer = document.getElementById('messagesContainer');
         if (!messagesContainer) return;
-        
+
         // Normalize field names (handle both upload response and message formats)
         const fileId = fileData.fileId;
         const filename = fileData.originalFilename || fileData.fileName;
@@ -343,7 +343,7 @@ const fileHandler = {
         const uploaderName = fileData.uploaderName;
         const uploadTime = fileData.uploadTime;
         const expiryTime = fileData.expiryTime;
-        
+
         // Check if message already exists
         if (typeof chat !== 'undefined' && chat.displayedMessageIds) {
             const messageKey = 'file_' + fileId;
@@ -352,11 +352,11 @@ const fileHandler = {
             }
             chat.displayedMessageIds.add(messageKey);
         }
-        
+
         const isImage = this.isImageFile(contentType);
         const timestamp = new Date(uploadTime);
         const timeString = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
+
         // Calculate expiry
         const expiryTimeObj = expiryTime ? new Date(expiryTime) : null;
         const remainingMs = expiryTimeObj ? expiryTimeObj - new Date() : 10 * 60 * 1000;
@@ -364,7 +364,7 @@ const fileHandler = {
         const minutes = Math.floor(remainingSeconds / 60);
         const seconds = remainingSeconds % 60;
         const expiryDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-        
+
         // Urgency class
         let urgencyClass = '';
         if (remainingSeconds <= 60) {
@@ -372,27 +372,27 @@ const fileHandler = {
         } else if (remainingSeconds <= 180) {
             urgencyClass = 'expiry-warning';
         }
-        
+
         const messageDiv = document.createElement('div');
         messageDiv.className = `message message-file ${isOwn ? 'message-own' : 'message-other'}`;
         messageDiv.dataset.messageId = 'file_' + fileId;
         messageDiv.dataset.fileId = fileId;
-        
+
         if (expiryTime) {
             messageDiv.dataset.expiryTime = expiryTime;
         }
-        
+
         const senderName = isOwn ? 'You' : (uploaderName || 'Unknown');
         const fileIcon = this.getFileIcon(contentType, filename);
         const fileSizeStr = this.formatFileSize(fileSize);
         const previewUrl = `${config.API_BASE_URL}/files/preview/${fileId}?userId=${localStorage.getItem('userId')}`;
         const downloadUrl = `${config.API_BASE_URL}/files/download/${fileId}?userId=${localStorage.getItem('userId')}`;
-        
+
         let contentHtml;
         if (isImage) {
             contentHtml = `
                 <div class="file-preview-container">
-                    <img src="${previewUrl}" alt="${this.escapeHtml(filename)}" 
+                    <img src="${previewUrl}" alt="${this.escapeHtml(filename)}"
                          class="file-preview-image" loading="lazy"
                          onclick="fileHandler.downloadFile('${fileId}')">
                 </div>
@@ -413,7 +413,7 @@ const fileHandler = {
                 </div>
             `;
         }
-        
+
         messageDiv.innerHTML = `
             <div class="message-header">
                 <span class="message-sender">${this.escapeHtml(senderName)}</span>
@@ -426,9 +426,9 @@ const fileHandler = {
                 ${contentHtml}
             </div>
         `;
-        
+
         messagesContainer.appendChild(messageDiv);
-        
+
         // Scroll to bottom if this is own message
         if (isOwn && typeof chat !== 'undefined' && chat.forceScrollToBottom) {
             chat.forceScrollToBottom();
@@ -436,33 +436,33 @@ const fileHandler = {
             chat.scrollToBottom();
         }
     },
-    
+
     /**
      * Download a file
      */
     async downloadFile(fileId) {
         const userId = localStorage.getItem('userId');
         if (!userId) return;
-        
+
         const downloadUrl = `${config.API_BASE_URL}/files/download/${fileId}?userId=${userId}`;
-        
+
         try {
             // Show loading indicator on the file message
             const messageDiv = document.querySelector(`[data-file-id="${fileId}"]`);
             if (messageDiv) {
                 messageDiv.classList.add('file-downloading');
             }
-            
+
             // Fetch file
             const response = await fetch(downloadUrl);
-            
+
             if (!response.ok) {
                 if (response.status === 404) {
                     throw new Error('File has expired or been deleted');
                 }
                 throw new Error('Download failed');
             }
-            
+
             // Get filename from Content-Disposition header
             const disposition = response.headers.get('Content-Disposition');
             let filename = 'download';
@@ -472,7 +472,7 @@ const fileHandler = {
                     filename = match[1];
                 }
             }
-            
+
             // Create blob and download
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
@@ -483,7 +483,7 @@ const fileHandler = {
             a.click();
             window.URL.revokeObjectURL(url);
             a.remove();
-            
+
         } catch (error) {
             console.error('Download failed:', error);
             if (typeof chat !== 'undefined' && chat.showError) {
@@ -497,14 +497,14 @@ const fileHandler = {
             }
         }
     },
-    
+
     /**
      * Check if file is an image
      */
     isImageFile(contentType) {
         return contentType && contentType.startsWith('image/');
     },
-    
+
     /**
      * Get file icon based on type
      */
@@ -513,7 +513,7 @@ const fileHandler = {
             const ext = this.getFileExtension(filename);
             contentType = this.getContentTypeFromExtension(ext);
         }
-        
+
         if (contentType.startsWith('image/')) return '🖼️';
         if (contentType.startsWith('video/')) return '🎬';
         if (contentType.startsWith('audio/')) return '🎵';
@@ -523,10 +523,10 @@ const fileHandler = {
         if (contentType.includes('powerpoint') || contentType.includes('presentation')) return '📽️';
         if (contentType.includes('zip') || contentType.includes('archive') || contentType.includes('compressed')) return '📦';
         if (contentType.includes('text')) return '📄';
-        
+
         return '📎';
     },
-    
+
     /**
      * Get content type from extension
      */
@@ -555,7 +555,7 @@ const fileHandler = {
         };
         return types[ext.toLowerCase()] || 'application/octet-stream';
     },
-    
+
     /**
      * Get file extension from filename
      */
@@ -564,7 +564,7 @@ const fileHandler = {
         const lastDot = filename.lastIndexOf('.');
         return lastDot >= 0 ? filename.substring(lastDot + 1) : '';
     },
-    
+
     /**
      * Format file size for display
      */
@@ -579,7 +579,7 @@ const fileHandler = {
             return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
         }
     },
-    
+
     /**
      * Escape HTML to prevent XSS
      */
