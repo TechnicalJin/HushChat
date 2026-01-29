@@ -481,6 +481,7 @@ const chat = {
         const isFile = message.type === 'FILE';
         messageDiv.className = `message ${isOwn ? 'message-own' : 'message-other'} ${isFile ? 'message-file' : ''}`;
         messageDiv.dataset.messageId = message.messageId;
+        messageDiv.dataset.senderId = message.senderId;
         
         // Store expiry time for countdown
         if (message.expiryTime) {
@@ -524,16 +525,27 @@ const chat = {
         // Store original content for edit functionality
         messageDiv.dataset.originalContent = message.content;
         
+        // Determine if sender name should be shown (group consecutive messages)
+        let showSenderName = true;
+        const lastMessage = this.messagesContainer.querySelector('.message:last-of-type');
+        if (lastMessage && lastMessage.dataset && lastMessage.dataset.senderId === message.senderId) {
+            showSenderName = false;
+        }
+
         let bodyHtml;
         if (isFile) {
             const fileLabel = this.escapeHtml(message.content);
             const fileSizeLabel = message.fileSize ? ` (${formatFileSize(message.fileSize)})` : '';
             const downloadUrl = message.downloadUrl || `${config.API_BASE_URL}/files/${message.fileId || message.messageId}/download`;
+            const isImage = /\.(png|jpe?g)$/i.test(message.content || '');
+            const mediaBlock = isImage
+                ? `<div class="file-thumb"><img src="${downloadUrl}" alt="${fileLabel}"></div>`
+                : `<div class="file-icon">📎</div>`;
             bodyHtml = `
                 <div id="${contentId}" class="${contentClasses} file-message-content">
-                    <div class="file-icon">📎</div>
+                    ${mediaBlock}
                     <div class="file-info">
-                        <a href="${downloadUrl}" class="file-name" target="_blank" rel="noopener noreferrer">
+                        <a href="${downloadUrl}" class="file-name" data-file-type="${isImage ? 'image' : 'file'}">
                             ${fileLabel}
                         </a>
                         <div class="file-meta-text">
@@ -546,14 +558,24 @@ const chat = {
             bodyHtml = `<div id="${contentId}" class="${contentClasses}">${this.escapeHtml(message.content)}</div>`;
         }
 
+        const senderHeaderHtml = showSenderName
+            ? `<div class="message-header">
+                    <span class="message-sender">${this.escapeHtml(message.senderName)}</span>
+                    <div class="message-meta">
+                        <span class="expiry-badge ${urgencyClass}">⏱ ${expiryDisplay}</span>
+                        <span class="message-time">${timeString}${editedIndicator}</span>
+                    </div>
+               </div>`
+            : `<div class="message-header">
+                    <span class="message-sender"></span>
+                    <div class="message-meta">
+                        <span class="expiry-badge ${urgencyClass}">⏱ ${expiryDisplay}</span>
+                        <span class="message-time">${timeString}${editedIndicator}</span>
+                    </div>
+               </div>`;
+
         messageDiv.innerHTML = `
-            <div class="message-header">
-                <span class="message-sender">${this.escapeHtml(message.senderName)}</span>
-                <div class="message-meta">
-                    <span class="expiry-badge ${urgencyClass}">⏱ ${expiryDisplay}</span>
-                    <span class="message-time">${timeString}${editedIndicator}</span>
-                </div>
-            </div>
+            ${senderHeaderHtml}
             <div class="message-bubble-wrapper">
                 ${bodyHtml}
                 ${isOwn && !isFile ? `<button class="message-action-btn" data-message-id="${message.messageId}" title="Message options">▼</button>` : ''}
@@ -563,6 +585,24 @@ const chat = {
         
         this.messagesContainer.appendChild(messageDiv);
         
+        // Attach file click handler for image preview
+        if (isFile) {
+            const fileLink = messageDiv.querySelector('.file-name');
+            if (fileLink) {
+                const isImage = fileLink.dataset.fileType === 'image';
+                const downloadUrl = fileLink.getAttribute('href');
+                if (isImage) {
+                    fileLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        this.openImagePreview(downloadUrl);
+                    });
+                } else {
+                    fileLink.setAttribute('target', '_blank');
+                    fileLink.setAttribute('rel', 'noopener noreferrer');
+                }
+            }
+        }
+
         // Attach action button click handler for own messages
         if (isOwn) {
             const actionBtn = messageDiv.querySelector('.message-action-btn');
@@ -708,6 +748,39 @@ const chat = {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    },
+
+    /**
+     * Open image preview modal
+     */
+    openImagePreview(url) {
+        const modal = document.getElementById('imagePreviewModal');
+        const img = document.getElementById('imagePreviewImg');
+        if (!modal || !img) return;
+
+        img.src = url;
+        modal.style.display = 'flex';
+
+        const close = () => {
+            modal.style.display = 'none';
+            img.src = '';
+            modal.removeEventListener('click', onClick);
+            document.removeEventListener('keydown', onKey);
+        };
+
+        const onClick = (e) => {
+            if (e.target === modal) {
+                close();
+            }
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') {
+                close();
+            }
+        };
+
+        modal.addEventListener('click', onClick);
+        document.addEventListener('keydown', onKey);
     },
     
     /**

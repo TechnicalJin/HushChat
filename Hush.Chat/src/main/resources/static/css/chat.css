@@ -254,10 +254,21 @@ body {
     background: var(--surface-color);
     border-top: 2px solid var(--border-color);
     padding: 16px 24px;
+    display: flex;
+    justify-content: center;
 }
 
 .message-form {
     display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    max-width: 900px;
+}
+
+.message-input-row {
+    display: flex;
+    align-items: flex-end;
     gap: 12px;
 }
 
@@ -278,6 +289,28 @@ body {
     font-family: inherit;
 }
 
+.btn-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    border: 2px solid var(--border-color);
+    background: #0f172a;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    font-size: 1.1rem;
+}
+
+.btn-icon:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
 .message-form textarea:focus {
     outline: none;
     border-color: var(--primary-color);
@@ -289,7 +322,7 @@ body {
 }
 
 .btn-send {
-    padding: 14px 28px;
+    padding: 14px 24px;
     background: var(--primary-color);
     color: white;
     border: none;
@@ -315,6 +348,22 @@ body {
     color: var(--text-secondary);
 }
 
+/* File upload status */
+.file-upload-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.file-upload-status span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Modal */
 .modal {
     position: fixed;
@@ -336,6 +385,22 @@ body {
     max-width: 400px;
     width: 90%;
     text-align: center;
+}
+
+.image-modal-content {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    max-width: 90%;
+    max-height: 90%;
+    box-shadow: none;
+}
+
+.image-modal-content img {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 16px;
+    display: block;
 }
 
 .modal-content h3 {
@@ -482,6 +547,105 @@ body {
     display: flex;
     flex-direction: row-reverse;
     align-items: flex-start;
+}
+
+/* File message card */
+.message-file .message-content {
+    padding: 10px 12px;
+    border-radius: 14px;
+    max-width: 360px;
+    width: 100%;
+}
+
+.file-message-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.file-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+.file-thumb {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #020617;
+    flex-shrink: 0;
+}
+
+.file-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.file-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+}
+
+.file-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.message-own .file-name {
+    color: white;
+}
+
+.message-other .file-name {
+    color: var(--primary-color);
+}
+
+.file-name:hover {
+    text-decoration: underline;
+}
+
+.file-meta-text {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.file-actions {
+    margin-top: 4px;
+    display: flex;
+    gap: 8px;
+}
+
+.file-action-btn {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    background: rgba(15, 23, 42, 0.5);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.file-action-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: rgba(99, 102, 241, 0.15);
 }
 
 /* Message Action Button (hover icon) */
@@ -649,7 +813,7 @@ body {
     }
 
     .message-input-container {
-        padding: 12px 16px;
+        padding: 10px 10px;
     }
 
     .btn-send span {
