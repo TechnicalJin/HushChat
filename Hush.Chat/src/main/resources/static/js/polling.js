@@ -178,7 +178,13 @@ const polling = {
         );
         
         if (response.success && response.data) {
-            this.processMessages(response.data.messages || []);
+            // Process unified events (messages + reactions)
+            this.processEvents(response.data.events || []);
+            
+            // Backward compatibility: also process messages array
+            if (!response.data.events && response.data.messages) {
+                this.processMessages(response.data.messages || []);
+            }
             
             // Update last message time from server
             if (response.data.serverTime) {
@@ -207,7 +213,13 @@ const polling = {
         );
         
         if (response.success && response.data) {
-            this.processMessages(response.data.messages || []);
+            // Process unified events (messages + reactions)
+            this.processEvents(response.data.events || []);
+            
+            // Backward compatibility: also process messages array
+            if (!response.data.events && response.data.messages) {
+                this.processMessages(response.data.messages || []);
+            }
             
             // Update last message time from server
             if (response.data.serverTime) {
@@ -216,6 +228,102 @@ const polling = {
         }
         
         return response.data?.messages || [];
+    },
+    
+    /**
+     * Process unified events from poll response.
+     * Handles both MESSAGE and REACTION event types.
+     */
+    processEvents(events) {
+        if (!events || events.length === 0) {
+            return;
+        }
+        
+        console.log(`Received ${events.length} event(s) from poll`);
+        
+        const messages = [];
+        const reactionEvents = [];
+        
+        // Separate events by type
+        for (const event of events) {
+            switch (event.type) {
+                case 'MESSAGE':
+                case 'MESSAGE_EDIT':
+                case 'MESSAGE_DELETE':
+                    if (event.message) {
+                        messages.push(event.message);
+                    }
+                    break;
+                case 'REACTION':
+                    reactionEvents.push(event);
+                    break;
+                default:
+                    console.warn('Unknown event type:', event.type);
+            }
+        }
+        
+        // Process messages
+        if (messages.length > 0) {
+            this.processMessages(messages);
+        }
+        
+        // Process reaction events
+        if (reactionEvents.length > 0) {
+            this.processReactionEvents(reactionEvents);
+        }
+    },
+    
+    /**
+     * Process reaction events from poll response.
+     * Updates the UI with reaction changes from other users.
+     */
+    processReactionEvents(reactionEvents) {
+        if (!reactionEvents || reactionEvents.length === 0) {
+            return;
+        }
+        
+        console.log(`Processing ${reactionEvents.length} reaction event(s)`);
+        
+        for (const event of reactionEvents) {
+            const { messageId, emoji, action, updatedReactionCounts, reactedByUserId, reactedByUserName } = event;
+            
+            if (!messageId) {
+                console.warn('Reaction event missing messageId:', event);
+                continue;
+            }
+            
+            console.log(`Reaction ${action}: ${emoji} on message ${messageId} by ${reactedByUserName}`);
+            
+            // Update the reaction UI for this message
+            if (typeof emojiSystem !== 'undefined') {
+                if (updatedReactionCounts) {
+                    // Full reaction update with all counts
+                    this.updateMessageReactionsFromPoll(messageId, updatedReactionCounts);
+                } else {
+                    // Fallback: update single reaction
+                    emojiSystem.updateMessageReactions(messageId, emoji, action, reactedByUserId);
+                }
+            }
+        }
+    },
+    
+    /**
+     * Update message reactions from poll event with full reaction counts.
+     * This ensures consistent state across all clients.
+     */
+    updateMessageReactionsFromPoll(messageId, reactionCounts) {
+        const currentUserId = localStorage.getItem('userId');
+        
+        const messageDiv = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (!messageDiv) {
+            console.warn('Message element not found for reaction update:', messageId);
+            return;
+        }
+        
+        // Use emojiSystem to render the full reaction state
+        if (typeof emojiSystem !== 'undefined' && emojiSystem.renderMessageReactions) {
+            emojiSystem.renderMessageReactions(messageDiv, reactionCounts, currentUserId);
+        }
     },
     
     /**
@@ -231,6 +339,12 @@ const polling = {
         // Render messages (chat module handles deduplication)
         if (typeof chat !== 'undefined' && chat.renderMessages) {
             chat.renderMessages(messages);
+        }
+        
+        // Fetch reactions for the new messages (still needed for initial load)
+        const messageIds = messages.map(m => m.messageId).filter(id => id);
+        if (messageIds.length > 0 && typeof emojiSystem !== 'undefined') {
+            emojiSystem.fetchAndRenderReactions(messageIds);
         }
         
         // Update last message time to the latest message timestamp

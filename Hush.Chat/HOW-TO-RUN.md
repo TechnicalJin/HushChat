@@ -17,3 +17,6 @@
 
 ## Stop
 Press `Ctrl+C` in terminal
+
+PS C:\Hush\Hush.Chat>
+.\mvnw.cmd spring-boot:run

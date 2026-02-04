@@ -10,6 +10,8 @@
     <title>Chat Room - Hush.Chat</title>
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/chat.css">
+    <!-- Emoji Picker Web Component -->
+    <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js"></script>
 </head>
 <body>
 <div class="chat-container">
@@ -62,6 +64,9 @@
         
         <form id="messageForm" class="message-form">
             <div class="message-input-row">
+                <button type="button" id="emojiPickerBtn" class="btn-icon" title="Emoji" aria-label="Open emoji picker">
+                    😊
+                </button>
                 <button type="button" id="filePickerBtn" class="btn-icon" title="Attach file">
                     📎
                 </button>
@@ -111,9 +116,18 @@
     </div>
 </div>
 
+<!-- Emoji Picker Modal -->
+<div id="emojiPickerModal" class="emoji-picker-modal" style="display: none;">
+    <div class="emoji-picker-backdrop"></div>
+    <div class="emoji-picker-container">
+        <emoji-picker class="dark"></emoji-picker>
+    </div>
+</div>
+
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/utils.js"></script>
+<script src="js/emoji.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/polling.js"></script>
 <script>

@@ -728,6 +728,9 @@ const chat = {
             </div>
         `;
 
+        // Reactions container placeholder (populated by emojiSystem)
+        const reactionsHtml = `<div class="message-reactions" data-message-id="${message.messageId}"></div>`;
+
         // Action button shown for ALL messages (not just own) for reply/copy access
         messageDiv.innerHTML = `
             ${senderHeaderHtml}
@@ -737,6 +740,7 @@ const chat = {
                 <button class="message-action-btn" data-message-id="${message.messageId}" title="Message options">▼</button>
             </div>
             ${isLongMessage ? `<button id="${btnId}" class="read-more-btn" data-content-id="${contentId}">Read More ▼</button>` : ''}
+            ${reactionsHtml}
             ${footerHtml}
         `;
         
@@ -1252,6 +1256,7 @@ const chat = {
     
     /**
      * FIX 2 & 12: Show context menu for message actions
+     * - Includes quick reactions bar at top (Instagram/WhatsApp style)
      * - Properly clamped to viewport bounds (never overflows)
      * - Auto-flips vertically if near bottom
      * - Shifts horizontally if near screen edge
@@ -1283,12 +1288,22 @@ const chat = {
         }
         
         const menu = document.createElement('div');
-        menu.className = 'message-context-menu';
+        menu.className = 'message-context-menu with-reactions';
+        
+        // Quick reactions bar at top (Instagram/WhatsApp style)
+        const defaultReactions = ['❤️', '😂', '😮', '😢', '😡', '👍'];
+        let quickReactionsHtml = '<div class="quick-reactions-bar">';
+        defaultReactions.forEach(emoji => {
+            quickReactionsHtml += `<button class="reaction-btn" data-emoji="${emoji}" data-message-id="${messageId}" title="React with ${emoji}">${emoji}</button>`;
+        });
+        quickReactionsHtml += `<button class="reaction-more-btn" data-message-id="${messageId}" title="More reactions">+</button>`;
+        quickReactionsHtml += '</div>';
         
         // Build menu items based on ownership
         // Reply & Copy are available for ALL messages
         // Edit & Unsend are ONLY for own messages
         let menuHtml = `
+            ${quickReactionsHtml}
             <button class="context-menu-item" data-action="reply">
                 <span class="context-menu-icon">↩️</span>
                 <span>Reply</span>
@@ -1332,7 +1347,7 @@ const chat = {
         // Wait for menu to render to get accurate dimensions
         requestAnimationFrame(() => {
             const menuRect = menu.getBoundingClientRect();
-            const menuWidth = menuRect.width || 200;
+            const menuWidth = menuRect.width || 320;
             const menuHeight = menuRect.height || 200;
             
             // Get touch/click position
@@ -1347,11 +1362,24 @@ const chat = {
             const inputBarHeight = document.querySelector('.message-input-container')?.offsetHeight || 80;
             const safeAreaBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-area-bottom') || '0') || 0;
             
-            // Calculate maximum allowed Y position
+            // Calculate maximum allowed positions
             const maxY = viewportHeight - inputBarHeight - safeAreaBottom - 10;
             const minY = 10;
             const minX = 10;
             const maxX = viewportWidth - menuWidth - 10;
+            
+            // FIX: Center horizontally on mobile if menu would overflow
+            if (menuWidth > viewportWidth - 40) {
+                // Menu is too wide, center it
+                x = Math.max(minX, (viewportWidth - menuWidth) / 2);
+            } else {
+                // Try to position near touch point, but keep in bounds
+                // Prefer positioning menu to the left of touch point
+                if (x + menuWidth > viewportWidth - minX) {
+                    x = Math.max(minX, viewportWidth - menuWidth - minX);
+                }
+                x = Math.max(minX, Math.min(x, maxX));
+            }
             
             // FIX 2: Auto-flip vertically if near bottom
             if (y + menuHeight > maxY) {
@@ -1365,21 +1393,44 @@ const chat = {
                 }
             }
             
-            // FIX 2: Shift horizontally if near screen edge
-            if (x + menuWidth > maxX + menuWidth) {
-                x = maxX;
-            }
-            if (x < minX) {
-                x = minX;
-            }
-            
             // Final clamp to ensure menu is fully visible
-            x = Math.max(minX, Math.min(x, maxX));
             y = Math.max(minY, Math.min(y, maxY - menuHeight));
             
             menu.style.left = x + 'px';
             menu.style.top = y + 'px';
         });
+        
+        // Add click handlers for quick reaction buttons
+        menu.querySelectorAll('.reaction-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const emoji = btn.dataset.emoji;
+                const msgId = btn.dataset.messageId;
+                this.closeContextMenu();
+                
+                // Use emoji system if available, otherwise fallback
+                if (typeof emojiSystem !== 'undefined') {
+                    emojiSystem.addReaction(msgId, emoji);
+                } else {
+                    this.addReactionToMessage(msgId, emoji);
+                }
+            });
+        });
+        
+        // Add click handler for "more reactions" button
+        const moreBtn = menu.querySelector('.reaction-more-btn');
+        if (moreBtn) {
+            moreBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const msgId = moreBtn.dataset.messageId;
+                this.closeContextMenu();
+                
+                // Open full emoji picker for reactions
+                if (typeof emojiSystem !== 'undefined') {
+                    emojiSystem.openPicker({ type: 'reaction', messageId: msgId });
+                }
+            });
+        }
         
         // Add click handlers for menu items
         menu.querySelectorAll('.context-menu-item').forEach(item => {
@@ -1389,6 +1440,30 @@ const chat = {
                 this.closeContextMenu();
             });
         });
+    },
+    
+    /**
+     * Fallback method to add reaction (if emoji system not loaded)
+     */
+    async addReactionToMessage(messageId, emoji) {
+        const roomCode = this.roomCode;
+        const userId = this.userId;
+        
+        try {
+            const response = await api.post('/reactions/toggle', {
+                roomCode: roomCode,
+                messageId: messageId,
+                userId: userId,
+                emoji: emoji
+            });
+            
+            if (response.success) {
+                this.showToast(response.data.action === 'added' ? 'Reaction added' : 'Reaction removed', 'success');
+            }
+        } catch (error) {
+            console.error('Failed to toggle reaction:', error);
+            this.showToast('Failed to add reaction', 'error');
+        }
     },
     
     /**

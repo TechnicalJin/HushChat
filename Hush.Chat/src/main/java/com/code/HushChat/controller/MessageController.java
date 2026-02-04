@@ -1,6 +1,7 @@
 package com.code.HushChat.controller;
 
 import com.code.HushChat.dto.MessageResponseDto;
+import com.code.HushChat.dto.PollEventDto;
 import com.code.HushChat.dto.SendMessageDto;
 import com.code.HushChat.model.ApiResponse;
 import com.code.HushChat.service.MessageService;
@@ -92,8 +93,15 @@ public class MessageController {
     }
     
     /**
-     * Long polling endpoint - waits for new messages
+     * Long polling endpoint - waits for new messages OR reaction events.
+     * Returns unified events that include both messages and reaction updates.
      * GET /api/messages/{roomCode}/poll?since={timestamp}&userId={userId}&timeout={seconds}
+     * 
+     * Response includes:
+     * - events: List of PollEventDto (MESSAGE, MESSAGE_EDIT, MESSAGE_DELETE, REACTION)
+     * - messages: List of MessageResponseDto (backward compatibility - extracted from events)
+     * - count: Total event count
+     * - serverTime: Current server time
      */
     @GetMapping("/{roomCode}/poll")
     public ResponseEntity<ApiResponse<Map<String, Object>>> pollMessages(
@@ -118,16 +126,27 @@ public class MessageController {
         }
         
         try {
-            List<MessageResponseDto> messages = messageService.pollMessages(
+            // Use the new event-based polling
+            List<PollEventDto> events = messageService.pollEvents(
                     roomCode, 
                     sinceTimestamp, 
                     userId,
                     timeout
             );
             
+            // Extract messages from events for backward compatibility
+            List<MessageResponseDto> messages = events.stream()
+                    .filter(e -> e.getType() == PollEventDto.EventType.MESSAGE || 
+                                e.getType() == PollEventDto.EventType.MESSAGE_EDIT ||
+                                e.getType() == PollEventDto.EventType.MESSAGE_DELETE)
+                    .map(PollEventDto::getMessage)
+                    .filter(msg -> msg != null)
+                    .toList();
+            
             Map<String, Object> response = new HashMap<>();
-            response.put("messages", messages);
-            response.put("count", messages.size());
+            response.put("events", events);     // Full event list with reactions
+            response.put("messages", messages); // Backward compatibility
+            response.put("count", events.size());
             response.put("serverTime", LocalDateTime.now().format(FORMATTER));
             
             return ResponseEntity.ok(
@@ -138,6 +157,7 @@ public class MessageController {
             log.warn("Poll interrupted for room: {}", roomCode);
             
             Map<String, Object> response = new HashMap<>();
+            response.put("events", List.of());
             response.put("messages", List.of());
             response.put("count", 0);
             response.put("serverTime", LocalDateTime.now().format(FORMATTER));

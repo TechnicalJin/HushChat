@@ -2,6 +2,7 @@ package com.code.HushChat.service;
 
 import com.code.HushChat.config.AppConfig;
 import com.code.HushChat.dto.MessageResponseDto;
+import com.code.HushChat.dto.PollEventDto;
 import com.code.HushChat.dto.SendMessageDto;
 import com.code.HushChat.exception.RoomNotFoundException;
 import com.code.HushChat.exception.UnauthorizedException;
@@ -14,9 +15,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -28,6 +32,7 @@ public class MessageService {
     private final InMemoryRoomStore roomStore;
     private final RoomService roomService;
     private final AppConfig appConfig;
+    private final LongPollManager longPollManager;
     
     // Maximum preview text length for replies
     private static final int MAX_PREVIEW_LENGTH = 100;
@@ -107,7 +112,26 @@ public class MessageService {
         log.debug("Message sent in room {} by user {}{}", roomCode, userId, 
                   replyTo != null ? " (reply to " + replyTo.getMessageId() + ")" : "");
         
-        return toMessageResponseDto(message, senderName);
+        // Create response DTO
+        MessageResponseDto responseDto = toMessageResponseDto(message, senderName);
+        
+        // Notify all pending long-poll requests for this room about the new message
+        notifyPendingPollsNewMessage(roomCode, responseDto);
+        
+        return responseDto;
+    }
+    
+    /**
+     * Notify all pending long-poll requests about a new message.
+     */
+    private void notifyPendingPollsNewMessage(String roomCode, MessageResponseDto message) {
+        try {
+            PollEventDto messageEvent = PollEventDto.messageEvent(roomCode, message);
+            longPollManager.notifyRoom(roomCode, messageEvent);
+            log.debug("Notified pending polls for room {} about new message", roomCode);
+        } catch (Exception e) {
+            log.error("Failed to notify pending polls for new message: {}", e.getMessage(), e);
+        }
     }
     
     /**
@@ -172,32 +196,66 @@ public class MessageService {
     }
     
     /**
-     * Long polling - wait for new messages
+     * Long polling - wait for new messages OR reaction events.
+     * Uses event-driven approach via LongPollManager for immediate notification.
+     * 
+     * @return List of poll events (messages and reactions)
      */
-    public List<MessageResponseDto> pollMessages(String roomCode, LocalDateTime sinceTimestamp, 
-                                                  String userId, int timeoutSeconds) throws InterruptedException {
-        long startTime = System.currentTimeMillis();
-        long timeoutMs = timeoutSeconds * 1000L;
-        
-        while (System.currentTimeMillis() - startTime < timeoutMs) {
-            List<MessageResponseDto> messages = getMessagesSince(roomCode, sinceTimestamp, userId);
-            
-            if (!messages.isEmpty()) {
-                return messages;
-            }
-            
-            // Check if room still exists
-            ChatRoom room = roomStore.get(roomCode);
-            if (room == null || room.isExpired()) {
-                throw new RoomNotFoundException("Room has been closed");
-            }
-            
-            // Wait before checking again
-            Thread.sleep(500); // Check every 500ms
+    public List<PollEventDto> pollEvents(String roomCode, LocalDateTime sinceTimestamp, 
+                                          String userId, int timeoutSeconds) throws InterruptedException {
+        // Validate room exists and user is a member
+        ChatRoom room = roomStore.get(roomCode);
+        if (room == null || room.isExpired()) {
+            throw new RoomNotFoundException("Room not found or expired: " + roomCode);
+        }
+        if (!room.getActiveUserIds().contains(userId)) {
+            throw new UnauthorizedException("User is not a member of this room");
         }
         
-        // Timeout - return empty list
-        return Collections.emptyList();
+        // First, check if there are already new messages available
+        List<MessageResponseDto> existingMessages = getMessagesSince(roomCode, sinceTimestamp, userId);
+        if (!existingMessages.isEmpty()) {
+            // Convert to poll events and return immediately
+            return existingMessages.stream()
+                    .map(msg -> PollEventDto.messageEvent(roomCode, msg))
+                    .collect(Collectors.toList());
+        }
+        
+        // No existing messages, register for long-poll notification
+        LongPollManager.PendingPoll pendingPoll = longPollManager.registerPoll(roomCode, userId, timeoutSeconds);
+        
+        try {
+            // Wait for events or timeout
+            CompletableFuture<List<PollEventDto>> future = pendingPoll.getFuture();
+            List<PollEventDto> events = future.get(timeoutSeconds, TimeUnit.SECONDS);
+            
+            return events != null ? events : Collections.emptyList();
+        } catch (java.util.concurrent.TimeoutException e) {
+            // Timeout - return empty list
+            return Collections.emptyList();
+        } catch (java.util.concurrent.ExecutionException e) {
+            log.error("Poll execution error: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+    
+    /**
+     * Legacy long polling - wait for new messages only (for backward compatibility)
+     * @deprecated Use pollEvents() instead for unified message + reaction updates
+     */
+    @Deprecated
+    public List<MessageResponseDto> pollMessages(String roomCode, LocalDateTime sinceTimestamp, 
+                                                  String userId, int timeoutSeconds) throws InterruptedException {
+        // Use the new event-based polling and extract only messages
+        List<PollEventDto> events = pollEvents(roomCode, sinceTimestamp, userId, timeoutSeconds);
+        
+        return events.stream()
+                .filter(e -> e.getType() == PollEventDto.EventType.MESSAGE || 
+                            e.getType() == PollEventDto.EventType.MESSAGE_EDIT ||
+                            e.getType() == PollEventDto.EventType.MESSAGE_DELETE)
+                .map(PollEventDto::getMessage)
+                .filter(msg -> msg != null)
+                .collect(Collectors.toList());
     }
     
     /**
@@ -300,7 +358,25 @@ public class MessageService {
         
         log.debug("Message {} edited in room {} by user {}", messageId, roomCode, userId);
         
-        return toMessageResponseDto(updatedMessage, senderName != null ? senderName : "Unknown");
+        MessageResponseDto responseDto = toMessageResponseDto(updatedMessage, senderName != null ? senderName : "Unknown");
+        
+        // Notify all pending polls about the edit
+        notifyPendingPollsMessageEdit(roomCode, responseDto);
+        
+        return responseDto;
+    }
+    
+    /**
+     * Notify all pending long-poll requests about a message edit.
+     */
+    private void notifyPendingPollsMessageEdit(String roomCode, MessageResponseDto message) {
+        try {
+            PollEventDto editEvent = PollEventDto.messageEditEvent(roomCode, message);
+            longPollManager.notifyRoom(roomCode, editEvent);
+            log.debug("Notified pending polls for room {} about message edit", roomCode);
+        } catch (Exception e) {
+            log.error("Failed to notify pending polls for message edit: {}", e.getMessage(), e);
+        }
     }
     
     /**
@@ -341,6 +417,24 @@ public class MessageService {
         
         log.debug("Message {} unsent in room {} by user {}", messageId, roomCode, userId);
         
-        return toMessageResponseDto(deletedMessage, senderName != null ? senderName : "Unknown");
+        MessageResponseDto responseDto = toMessageResponseDto(deletedMessage, senderName != null ? senderName : "Unknown");
+        
+        // Notify all pending polls about the deletion
+        notifyPendingPollsMessageDelete(roomCode, responseDto);
+        
+        return responseDto;
+    }
+    
+    /**
+     * Notify all pending long-poll requests about a message deletion.
+     */
+    private void notifyPendingPollsMessageDelete(String roomCode, MessageResponseDto message) {
+        try {
+            PollEventDto deleteEvent = PollEventDto.messageDeleteEvent(roomCode, message);
+            longPollManager.notifyRoom(roomCode, deleteEvent);
+            log.debug("Notified pending polls for room {} about message delete", roomCode);
+        } catch (Exception e) {
+            log.error("Failed to notify pending polls for message delete: {}", e.getMessage(), e);
+        }
     }
 }

@@ -1227,14 +1227,15 @@ body {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     z-index: 1001;
     min-width: 160px;
-    max-width: 200px;
+    /* FIX: Remove max-width constraint that clips emoji bar */
+    max-width: calc(100vw - 20px);
     padding: 8px 0;
     animation: menuFadeIn 0.15s ease;
     /* FIX: Ensure menu never goes off-screen */
     max-height: calc(100vh - 20px);
     overflow-y: auto;
-    /* FIX: Prevent menu from causing horizontal scroll */
-    overflow-x: hidden;
+    /* FIX: Allow horizontal content to size naturally */
+    overflow-x: visible;
 }
 
 /* FIX: Active message selection highlight when context menu is open */
@@ -1648,7 +1649,9 @@ body {
        Centered, larger touch targets, never overflow viewport */
     .message-context-menu {
         min-width: 200px;
-        max-width: calc(100vw - 32px);
+        /* FIX: Allow content to determine width, cap at viewport */
+        max-width: calc(100vw - 24px);
+        width: max-content;
         /* FIX: Better positioning and border radius for mobile */
         border-radius: 16px;
         /* FIX: Add subtle backdrop blur for depth */
@@ -1810,5 +1813,298 @@ body {
     .welcome-message .lock-icon {
         font-size: 2rem;
         margin-bottom: 8px;
+    }
+}
+
+/* ========================================
+   EMOJI PICKER & REACTIONS SYSTEM
+   Instagram/WhatsApp-style emoji support
+   ======================================== */
+
+/* Emoji Picker Modal */
+.emoji-picker-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.emoji-picker-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.emoji-picker-container {
+    position: relative;
+    z-index: 1;
+    animation: emojiPickerFadeIn 0.2s ease;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes emojiPickerFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Dark theme for emoji-picker-element */
+emoji-picker {
+    --background: #1a1f2e;
+    --border-color: #374151;
+    --indicator-color: #6366f1;
+    --input-border-color: #374151;
+    --input-font-color: #f3f4f6;
+    --input-placeholder-color: #6b7280;
+    --button-hover-background: #374151;
+    --button-active-background: #4b5563;
+    --category-font-color: #9ca3af;
+    --num-columns: 8;
+    height: 400px;
+    width: 350px;
+}
+
+emoji-picker.dark {
+    color-scheme: dark;
+}
+
+/* Quick Reactions Bar (appears in context menu) */
+.quick-reactions-bar {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 12px 12px;
+    justify-content: center;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--surface-color);
+    border-radius: 12px 12px 0 0;
+    /* FIX: Ensure all emojis are visible */
+    min-width: max-content;
+    overflow: visible;
+}
+
+.reaction-btn {
+    font-size: 22px;
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.reaction-btn:hover {
+    background: rgba(99, 102, 241, 0.15);
+    transform: scale(1.15);
+}
+
+.reaction-btn:active {
+    transform: scale(0.95);
+}
+
+.reaction-more-btn {
+    font-size: 16px;
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+    background: rgba(107, 114, 128, 0.2);
+    border: 2px solid var(--border-color);
+    border-radius: 50%;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.reaction-more-btn:hover {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+/* Message Reactions Display (below message bubble) */
+.message-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    padding-left: 4px;
+}
+
+/* Hide empty reactions container */
+.message-reactions:empty {
+    display: none;
+}
+
+.message-own .message-reactions {
+    justify-content: flex-end;
+    padding-left: 0;
+    padding-right: 4px;
+}
+
+.reaction-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 16px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    color: var(--text-color);
+}
+
+.reaction-badge:hover {
+    background: rgba(99, 102, 241, 0.25);
+    border-color: rgba(99, 102, 241, 0.5);
+}
+
+.reaction-badge.active {
+    background: rgba(99, 102, 241, 0.3);
+    border-color: var(--primary-color);
+}
+
+.reaction-badge .reaction-emoji {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.reaction-badge .reaction-count {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 12px;
+    text-align: center;
+}
+
+.reaction-badge.active .reaction-count {
+    color: var(--primary-color);
+}
+
+/* Context menu with reactions bar */
+.message-context-menu.with-reactions {
+    padding-top: 0;
+    /* FIX: Size based on content (emoji bar width) */
+    width: max-content;
+    min-width: 200px;
+}
+
+.message-context-menu.with-reactions .quick-reactions-bar {
+    margin: 0;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    /* FIX: Ensure emoji bar determines menu width */
+    width: 100%;
+}
+
+/* ========================================
+   MOBILE EMOJI STYLES
+   ======================================== */
+
+@media (max-width: 768px) {
+    /* Bottom sheet style picker on mobile */
+    .emoji-picker-modal {
+        align-items: flex-end;
+    }
+    
+    .emoji-picker-container {
+        width: 100%;
+        max-height: 60vh;
+        border-radius: 20px 20px 0 0;
+        animation: emojiSlideUp 0.25s ease;
+    }
+    
+    @keyframes emojiSlideUp {
+        from {
+            opacity: 0;
+            transform: translateY(100%);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    emoji-picker {
+        width: 100%;
+        height: 50vh;
+        max-height: 400px;
+        --num-columns: 7;
+        border-radius: 20px 20px 0 0;
+    }
+    
+    /* Touch-friendly quick reactions */
+    .quick-reactions-bar {
+        gap: 6px;
+        padding: 14px 10px;
+        /* FIX: Ensure all emojis visible on mobile */
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    
+    .quick-reactions-bar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .reaction-btn {
+        font-size: 24px;
+        min-width: 44px;
+        min-height: 44px;
+        width: 44px;
+        height: 44px;
+    }
+
+    .reaction-more-btn {
+        min-width: 44px;
+        min-height: 44px;
+        width: 44px;
+        height: 44px;
+    }
+    
+    /* Reaction badges - touch friendly */
+    .message-reactions {
+        gap: 5px;
+        margin-top: 5px;
+    }
+    
+    .reaction-badge {
+        padding: 5px 10px;
+        min-height: 32px;
     }
 }

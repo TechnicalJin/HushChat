@@ -91,6 +91,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/rooms/*/info").permitAll()  // Room info
                 .requestMatchers("/api/messages/**").permitAll()   // All message endpoints
                 .requestMatchers("/api/files/**").permitAll()      // File upload/download
+                .requestMatchers("/api/reactions/**").permitAll()  // Emoji reactions
                 .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/api/dev/**").permitAll()        // Development endpoints
