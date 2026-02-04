@@ -93,7 +93,8 @@ public class RoomController {
      */
     @GetMapping("/{roomCode}/info")
     public ResponseEntity<ApiResponse<RoomInfoDto>> getRoomInfo(@PathVariable String roomCode) {
-        log.info("Getting room info: {}", roomCode);
+        // Use debug level to avoid flooding logs (this endpoint is polled frequently)
+        log.debug("Getting room info: {}", roomCode);
         
         RoomInfoDto roomInfo = roomService.getRoomInfo(roomCode.toUpperCase());
         

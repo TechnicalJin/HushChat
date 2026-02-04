@@ -12,6 +12,17 @@
     --danger-color: #ef4444;
     --own-message-bg: #6366f1;
     --other-message-bg: #334155;
+    /* FIX: Custom property for dynamic viewport height (set by JS) */
+    --vh: 1vh;
+    /* FIX: Safe area insets for iOS notch/home indicator */
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-left: env(safe-area-inset-left, 0px);
+    --safe-area-right: env(safe-area-inset-right, 0px);
+    /* FIX: Input bar height tracking for scroll button positioning */
+    --input-bar-height: 80px;
+    /* FIX: Reply bar reserved height to prevent scroll jumps */
+    --reply-bar-height: 0px;
 }
 
 * {
@@ -24,55 +35,93 @@ body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: var(--background-dark);
     color: var(--text-color);
-    height: 100vh;
+    /* FIX: Use dynamic viewport height for mobile browsers */
+    height: 100vh; /* Fallback for older browsers */
+    height: 100dvh; /* Dynamic viewport height - accounts for mobile browser chrome */
     overflow: hidden;
+    /* Prevent iOS rubber-band scrolling on body */
+    position: fixed;
+    width: 100%;
 }
 
 .chat-container {
     display: flex;
     flex-direction: column;
+    /* FIX: Use dvh with fallback to properly size container on mobile */
     height: 100vh;
+    height: 100dvh;
     max-width: 1200px;
     margin: 0 auto;
+    /* FIX: Ensure children don't overflow and input bar stays visible */
+    overflow: hidden;
 }
 
-/* Chat Header */
+/* Chat Header - Compact design */
 .chat-header {
     background: var(--surface-color);
     border-bottom: 2px solid var(--border-color);
-    padding: 16px 24px;
+    padding: 12px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.room-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0; /* Allow text truncation */
+    flex: 1;
 }
 
 .room-info h2 {
     color: var(--primary-color);
-    font-size: 1.3rem;
-    margin-bottom: 4px;
+    font-size: 1.1rem;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .room-meta {
     display: flex;
-    gap: 20px;
-    font-size: 0.85rem;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
     color: var(--text-secondary);
+}
+
+.room-meta .separator {
+    opacity: 0.5;
+    font-size: 0.6rem;
 }
 
 .room-code strong {
     color: var(--text-color);
     font-weight: 700;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+}
+
+.user-count {
+    white-space: nowrap;
 }
 
 .btn-leave {
     background: var(--danger-color);
     color: white;
     border: none;
-    padding: 10px 20px;
+    padding: 8px 16px;
     border-radius: 8px;
     cursor: pointer;
     font-weight: 600;
+    font-size: 0.85rem;
     transition: all 0.3s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .btn-leave:hover {
@@ -87,12 +136,25 @@ body {
     overflow-x: hidden;
     padding: 24px;
     background: var(--background-dark);
+    /* FIX: Ensure messages container shrinks to allow input bar space */
+    min-height: 0;
 }
 
 .welcome-message {
     text-align: center;
     padding: 40px 20px;
     color: var(--text-secondary);
+    /* FIX: Smooth fade-out when first message arrives */
+    transition: opacity 0.5s ease, max-height 0.5s ease, padding 0.5s ease;
+    max-height: 300px;
+    overflow: hidden;
+}
+
+.welcome-message.fading-out {
+    opacity: 0;
+    max-height: 0;
+    padding: 0 20px;
+    pointer-events: none;
 }
 
 .welcome-message .lock-icon {
@@ -120,6 +182,9 @@ body {
     max-width: 72%;
     min-width: 140px;
     animation: fadeIn 0.3s ease;
+    /* FIX: Prevent long content from breaking layout */
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .message-own {
@@ -128,6 +193,17 @@ body {
 
 .message-other {
     margin-right: auto;
+}
+
+/* FIX: Message grouping - tighter spacing for same sender */
+.message.message-grouped {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+/* FIX: Larger margin when sender changes */
+.message.message-new-sender {
+    margin-top: 16px;
 }
 
 .message-header {
@@ -156,10 +232,16 @@ body {
     padding: 12px 16px;
     border-radius: 12px;
     word-wrap: break-word;
+    /* FIX: Prevent long URLs/filenames from breaking layout */
     word-break: break-word;
+    overflow-wrap: anywhere;
     line-height: 1.5;
     white-space: pre-wrap;
-    overflow-wrap: break-word;
+    /* FIX: Ensure no horizontal scroll ever */
+    max-width: 100%;
+    overflow-x: hidden;
+    -webkit-hyphens: auto;
+    hyphens: auto;
 }
 
 /* Collapsible message content */
@@ -261,13 +343,20 @@ body {
     border-bottom-left-radius: 4px;
 }
 
-/* Message Input */
+/* Message Input Container - Fixed for mobile safe areas */
 .message-input-container {
     background: var(--surface-color);
     border-top: 2px solid var(--border-color);
     padding: 16px 24px;
+    /* iOS safe area support for notch/home indicator */
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    /* Prevent input from being hidden */
+    flex-shrink: 0;
+    position: relative;
+    z-index: 50;
 }
 
 .message-form {
@@ -407,11 +496,12 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.85);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
+    padding: 16px;
 }
 
 .modal-content {
@@ -423,20 +513,32 @@ body {
     text-align: center;
 }
 
+/* Image Preview Modal - FIX: Ensure images fit viewport at 100% zoom */
 .image-modal-content {
     background: transparent;
     padding: 0;
     border-radius: 0;
-    max-width: 90%;
-    max-height: 90%;
+    /* Use viewport units to ensure image fits screen */
+    max-width: calc(100vw - 32px);
+    max-height: calc(100vh - 32px);
     box-shadow: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Allow scrolling for very large images if needed */
+    overflow: auto;
 }
 
 .image-modal-content img {
-    max-width: 100%;
-    max-height: 100%;
-    border-radius: 16px;
+    /* Ensure image never exceeds viewport */
+    max-width: calc(100vw - 48px);
+    max-height: calc(100vh - 48px);
+    width: auto;
+    height: auto;
+    border-radius: 8px;
     display: block;
+    /* Maintain aspect ratio */
+    object-fit: contain;
 }
 
 .modal-content h3 {
@@ -549,6 +651,10 @@ body {
     font-size: 0.75rem;
     color: var(--text-secondary);
     gap: 6px;
+    /* FIX: Consistent alignment regardless of reply preview height */
+    align-items: center;
+    flex-wrap: nowrap;
+    opacity: 0.85;
 }
 
 .message-footer-own {
@@ -557,6 +663,12 @@ body {
 
 .message-footer-other {
     justify-content: flex-start;
+}
+
+/* FIX: Ensure timestamp text is consistent */
+.message-time {
+    font-size: 0.75rem;
+    white-space: nowrap;
 }
 
 /* Message Expiring Animation */
@@ -701,104 +813,6 @@ body {
     background: rgba(99, 102, 241, 0.15);
 }
 
-/* Message Action Button (hover icon) */
-.message-action-btn {
-    position: absolute;
-    top: 50%;
-    right: -24px;
-    transform: translateY(-50%);
-    width: 24px;
-    height: 24px;
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    border-radius: 50%;
-    color: var(--text-secondary);
-    font-size: 10px;
-    cursor: pointer;
-    opacity: 0;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10;
-}
-
-/* Attach arrow to same side as bubble */
-.message-other .message-action-btn {
-    left: -24px;
-    right: auto;
-}
-
-.message-own .message-action-btn {
-    right: -30px;
-    left: auto;
-}
-
-.message:hover .message-action-btn {
-    opacity: 1;
-}
-
-.message-action-btn:hover {
-    background: var(--primary-color);
-    color: white;
-    border-color: var(--primary-color);
-    transform: scale(1.1);
-}
-
-/* Context Menu */
-.message-context-menu {
-    position: fixed;
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 1001;
-    min-width: 160px;
-    padding: 6px 0;
-    animation: menuFadeIn 0.15s ease;
-}
-
-@keyframes menuFadeIn {
-    from {
-        opacity: 0;
-        transform: scale(0.95) translateY(-5px);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1) translateY(0);
-    }
-}
-
-.context-menu-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 10px 16px;
-    background: none;
-    border: none;
-    color: var(--text-color);
-    font-size: 0.9rem;
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.15s ease;
-}
-
-.context-menu-item:hover {
-    background: rgba(99, 102, 241, 0.15);
-}
-
-.context-menu-item-danger:hover {
-    background: rgba(239, 68, 68, 0.15);
-    color: var(--danger-color);
-}
-
-.context-menu-icon {
-    font-size: 1rem;
-    width: 20px;
-    text-align: center;
-}
-
 /* Message Editing State */
 .message-editing {
     outline: 2px solid var(--primary-color);
@@ -846,57 +860,6 @@ body {
     to {
         opacity: 0;
         transform: scale(0.9);
-    }
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .chat-header {
-        padding: 12px 16px;
-    }
-
-    .room-info h2 {
-        font-size: 1.1rem;
-    }
-
-    .room-meta {
-        flex-direction: column;
-        gap: 4px;
-    }
-
-    .messages-container {
-        padding: 16px;
-    }
-
-    .message {
-        max-width: 88%;
-    }
-
-    .message-input-container {
-        padding: 10px 10px;
-    }
-
-    .btn-send span {
-        display: none;
-    }
-
-    .btn-send::after {
-        content: '➤';
-    }
-
-    /* Mobile: always show action button a bit closer to bubble */
-    .message-own .message-action-btn,
-    .message-other .message-action-btn {
-        opacity: 0.7;
-    }
-
-    .message-action-btn {
-        right: -18px;
-    }
-
-    .message-other .message-action-btn {
-        left: -18px;
-        right: auto;
     }
 }
 
@@ -979,10 +942,691 @@ body {
     }
 }
 
-/* Responsive adjustments for scroll button */
+/* ========================================
+   TOAST NOTIFICATIONS
+   User feedback for actions (Copy, Reply, etc.)
+   ======================================== */
+
+.toast-notification {
+    position: fixed;
+    bottom: calc(100px + var(--safe-area-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    z-index: 2000;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.toast-notification.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.toast-success {
+    background: var(--success-color);
+    color: white;
+}
+
+.toast-error {
+    background: var(--danger-color);
+    color: white;
+}
+
+.toast-info {
+    background: var(--primary-color);
+    color: white;
+}
+
+/* Toast icon */
+.toast-notification::before {
+    margin-right: 8px;
+}
+
+.toast-success::before {
+    content: '✓';
+}
+
+.toast-error::before {
+    content: '✕';
+}
+
+.toast-info::before {
+    content: 'ℹ';
+}
+
+/* ========================================
+   REPLY SYSTEM STYLES
+   ======================================== */
+
+/* FIX: Reply bar wrapper for smooth height animation (prevents scroll jump) */
+.reply-preview-wrapper {
+    max-width: 900px;
+    width: 100%;
+    overflow: hidden;
+    /* FIX: Smooth height transition to prevent scroll jumps */
+    transition: max-height 0.25s ease, opacity 0.2s ease;
+    max-height: 0;
+    opacity: 0;
+}
+
+.reply-preview-wrapper.visible {
+    max-height: 80px;
+    opacity: 1;
+}
+
+/* Reply Preview Bar - shown at top of input when replying */
+.reply-preview-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.reply-preview-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.reply-preview-indicator {
+    width: 3px;
+    height: 36px;
+    background: var(--primary-color);
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.reply-preview-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.reply-preview-sender {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.reply-preview-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.reply-preview-type-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.reply-preview-close {
+    background: rgba(239, 68, 68, 0.2);
+    border: none;
+    color: var(--danger-color);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    margin-left: 12px;
+}
+
+.reply-preview-close:hover {
+    background: var(--danger-color);
+    color: white;
+    transform: scale(1.1);
+}
+
+/* Reply Container inside message bubble */
+.reply-container {
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-left: 3px solid var(--primary-color);
+    max-width: 100%;
+    overflow: hidden;
+    /* FIX: Prevent reply preview from affecting timestamp alignment */
+    flex-shrink: 0;
+}
+
+.reply-container:hover {
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.message-own .reply-container {
+    background: rgba(255, 255, 255, 0.1);
+    border-left-color: rgba(255, 255, 255, 0.7);
+}
+
+.message-own .reply-container:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* FIX: Deleted message styling with trash icon and italic text */
+.reply-container-deleted {
+    opacity: 0.5;
+    font-style: italic;
+    cursor: default;
+    pointer-events: none;
+}
+
+.reply-container-deleted .reply-deleted-text {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.reply-container-deleted .reply-deleted-text::before {
+    content: '🗑️';
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+.reply-sender {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    margin-bottom: 2px;
+    display: block;
+}
+
+.message-own .reply-sender {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.reply-text {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.message-own .reply-text {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.reply-type-icon {
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.reply-deleted-text {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Highlight animation when scrolling to replied message */
+@keyframes highlightMessage {
+    0% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.2);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    }
+}
+
+.message-highlighted {
+    animation: highlightMessage 1.5s ease-out;
+    border-radius: 12px;
+}
+
+/* Context Menu - Enhanced with Reply & Copy for all messages */
+.message-context-menu {
+    position: fixed;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    z-index: 1001;
+    min-width: 160px;
+    max-width: 200px;
+    padding: 8px 0;
+    animation: menuFadeIn 0.15s ease;
+    /* FIX: Ensure menu never goes off-screen */
+    max-height: calc(100vh - 20px);
+    overflow-y: auto;
+    /* FIX: Prevent menu from causing horizontal scroll */
+    overflow-x: hidden;
+}
+
+/* FIX: Active message selection highlight when context menu is open */
+.message-context-active {
+    position: relative;
+}
+
+.message-context-active::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 16px;
+    background: rgba(99, 102, 241, 0.1);
+    border: 2px solid rgba(99, 102, 241, 0.3);
+    pointer-events: none;
+    animation: contextHighlight 0.2s ease;
+}
+
+@keyframes contextHighlight {
+    from {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Context menu items - vertical list layout */
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    color: var(--text-color);
+    font-size: 0.9rem;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease;
+    white-space: nowrap;
+}
+
+.context-menu-item:hover {
+    background: rgba(99, 102, 241, 0.15);
+}
+
+.context-menu-item-danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--danger-color);
+}
+
+.context-menu-icon {
+    font-size: 1rem;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+@keyframes menuFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.context-menu-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 6px 0;
+}
+
+/* Swipe-to-reply styles (mobile) */
+.message-swipe-container {
+    position: relative;
+    overflow: visible;
+    touch-action: pan-y;
+}
+
+.swipe-reply-indicator {
+    position: absolute;
+    left: -50px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    background: var(--primary-color);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.swipe-reply-indicator.visible {
+    opacity: 1;
+}
+
+.swipe-reply-indicator::before {
+    content: '↩';
+    font-size: 1.2rem;
+    color: white;
+}
+
+/* Message action button - show for all messages on hover */
+.message-action-btn {
+    position: absolute;
+    top: 50%;
+    right: -24px;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    color: var(--text-secondary);
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+/* Attach arrow to same side as bubble */
+.message-other .message-action-btn {
+    left: -24px;
+    right: auto;
+}
+
+.message-own .message-action-btn {
+    right: -30px;
+    left: auto;
+}
+
+.message:hover .message-action-btn {
+    opacity: 1;
+}
+
+.message-action-btn:hover {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+    transform: translateY(-50%) scale(1.1);
+}
+
+/* ========================================
+   MOBILE RESPONSIVE STYLES
+   Comprehensive fixes for mobile UI issues
+   ======================================== */
+
 @media (max-width: 768px) {
+    /* === FIX 11: KEYBOARD SAFE AREA ===
+       Override body and container for mobile viewport handling */
+    body {
+        height: 100vh;
+        height: -webkit-fill-available; /* iOS Safari fallback */
+        height: 100dvh;
+        /* FIX: Prevent rubber-banding on iOS */
+        overscroll-behavior: none;
+    }
+    
+    .chat-container {
+        height: 100vh;
+        height: -webkit-fill-available;
+        height: 100dvh;
+        /* Prevent content from pushing input bar off-screen */
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    
+    /* === HEADER MOBILE - Ultra compact single row === */
+    .chat-header {
+        padding: 10px 12px;
+        /* FIX: Prevent header from shrinking */
+        flex-shrink: 0;
+        /* Safe area for notch */
+        padding-top: max(10px, var(--safe-area-top));
+        gap: 8px;
+    }
+    
+    .room-info {
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .room-info h2 {
+        font-size: 1rem;
+        max-width: 120px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .room-meta {
+        flex-direction: row;
+        gap: 6px;
+        font-size: 0.75rem;
+    }
+    
+    .room-meta .separator {
+        display: inline;
+    }
+    
+    .room-code strong {
+        font-size: 0.75rem;
+    }
+    
+    .user-count {
+        font-size: 0.75rem;
+    }
+    
+    .btn-leave {
+        padding: 6px 12px;
+        font-size: 0.8rem;
+        border-radius: 6px;
+    }
+
+    /* === MESSAGES CONTAINER MOBILE === */
+    .messages-container {
+        padding: 12px;
+        padding-bottom: 8px;
+        /* FIX: Allow messages to scroll, container takes remaining space */
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        /* FIX: Prevent horizontal scroll from long content */
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* FIX 7: MESSAGE GROUPING MOBILE */
+    .message {
+        max-width: 88%;
+        /* FIX 4: Prevent long text from breaking layout */
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+    
+    .message.message-grouped {
+        margin-top: 3px;
+        margin-bottom: 3px;
+    }
+
+    /* === FIX 1: MESSAGE ACTION BUTTON - HIDDEN ON MOBILE ===
+       Users use long-press for context menu instead */
+    .message-action-btn {
+        display: none !important;
+    }
+
+    /* === FIX 11 & 9: MESSAGE INPUT BAR MOBILE ===
+       Always visible, respects keyboard and safe areas */
+    .message-input-container {
+        /* FIX: Prevent shrinking - input bar MUST always be visible */
+        flex-shrink: 0;
+        padding: 12px 12px;
+        /* iOS safe area support - keyboard and home indicator */
+        padding-bottom: max(12px, env(safe-area-inset-bottom));
+        /* Ensure it's above other content */
+        z-index: 100;
+        position: relative;
+        /* Visible background */
+        background: var(--surface-color);
+        border-top: 2px solid var(--border-color);
+        /* FIX: Smooth transition when reply bar appears/disappears */
+        transition: padding 0.2s ease;
+    }
+
+    .message-input-row {
+        gap: 8px;
+        align-items: flex-end;
+        width: 100%;
+    }
+
+    /* File picker button - smaller on mobile */
+    .btn-icon {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        font-size: 1rem;
+    }
+
+    /* FIX 9: Textarea - proper auto-grow behavior */
+    .message-form textarea {
+        flex: 1;
+        min-width: 0; /* Allow shrinking */
+        padding: 10px 14px;
+        min-height: 40px;
+        /* FIX: Max height for 4-5 lines before internal scroll */
+        max-height: 120px;
+        font-size: 16px; /* Prevent iOS zoom on focus */
+        /* FIX: Smooth height animation */
+        transition: height 0.15s ease;
+    }
+
+    /* Send button - icon only on mobile */
+    .btn-send {
+        padding: 10px 14px;
+        min-width: 44px;
+        border-radius: 50%;
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .btn-send span {
+        display: none;
+    }
+
+    .btn-send::after {
+        content: '➤';
+        font-size: 1.1rem;
+    }
+
+    /* === FIX 8: REPLY PREVIEW BAR MOBILE ===
+       Full width, proper spacing, no scroll jump */
+    .reply-preview-wrapper {
+        width: 100%;
+        max-width: none;
+    }
+    
+    .reply-preview-bar {
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        border-radius: 10px;
+        width: 100%;
+        max-width: none;
+        /* Ensure it doesn't overflow */
+        box-sizing: border-box;
+    }
+
+    .reply-preview-content {
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .reply-preview-indicator {
+        width: 3px;
+        height: 32px;
+    }
+
+    .reply-preview-info {
+        gap: 2px;
+        min-width: 0;
+        flex: 1;
+    }
+
+    .reply-preview-sender {
+        font-size: 0.75rem;
+    }
+
+    .reply-preview-text {
+        font-size: 0.8rem;
+        max-width: 100%;
+    }
+
+    .reply-preview-type-icon {
+        font-size: 1rem;
+    }
+
+    /* Close button - thumb friendly size */
+    .reply-preview-close {
+        width: 32px;
+        height: 32px;
+        margin-left: 8px;
+        font-size: 1rem;
+        /* FIX: Touch-friendly tap target */
+        touch-action: manipulation;
+    }
+
+    /* === SCROLL TO BOTTOM BUTTON MOBILE === 
+       Position above input bar, don't overlap UI */
     .scroll-to-bottom-btn {
-        bottom: 90px;
+        bottom: calc(80px + env(safe-area-inset-bottom, 0px));
         right: 16px;
         width: 44px;
         height: 44px;
@@ -998,5 +1642,173 @@ body {
         font-size: 0.7rem;
         top: -4px;
         right: -4px;
+    }
+
+    /* === FIX 2: CONTEXT MENU MOBILE ===
+       Centered, larger touch targets, never overflow viewport */
+    .message-context-menu {
+        min-width: 200px;
+        max-width: calc(100vw - 32px);
+        /* FIX: Better positioning and border radius for mobile */
+        border-radius: 16px;
+        /* FIX: Add subtle backdrop blur for depth */
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+    }
+
+    /* FIX: Larger touch targets for menu items */
+    .context-menu-item {
+        padding: 16px 20px;
+        font-size: 1rem;
+        gap: 14px;
+        /* FIX: Touch-friendly interaction */
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+    
+    .context-menu-item:active {
+        background: rgba(99, 102, 241, 0.25);
+    }
+    
+    .context-menu-item-danger:active {
+        background: rgba(239, 68, 68, 0.25);
+    }
+
+    .context-menu-icon {
+        font-size: 1.2rem;
+    }
+    
+    .context-menu-divider {
+        margin: 8px 0;
+    }
+
+    /* === FIX 3 & 5: REPLY CONTAINER IN MESSAGE BUBBLE MOBILE === */
+    .reply-container {
+        padding: 8px 10px;
+        margin-bottom: 6px;
+    }
+
+    .reply-sender {
+        font-size: 0.7rem;
+    }
+
+    .reply-text {
+        font-size: 0.75rem;
+        gap: 4px;
+    }
+    
+    /* FIX 5: Reply type icon visibility */
+    .reply-type-icon {
+        font-size: 0.85rem;
+        flex-shrink: 0;
+    }
+
+    /* === FIX 12: ACTIVE MESSAGE SELECTION STATE MOBILE === */
+    .message-context-active::before {
+        inset: -6px;
+        border-radius: 18px;
+    }
+
+    /* === IMAGE PREVIEW MODAL MOBILE === */
+    .modal {
+        padding: 8px;
+    }
+
+    .image-modal-content {
+        max-width: calc(100vw - 16px);
+        max-height: calc(100vh - 16px);
+    }
+
+    .image-modal-content img {
+        max-width: calc(100vw - 24px);
+        max-height: calc(100vh - 24px);
+        border-radius: 4px;
+    }
+
+    .modal-content {
+        padding: 24px;
+        margin: 16px;
+    }
+    
+    /* === FIX 10: TOAST NOTIFICATIONS MOBILE === */
+    .toast-notification {
+        bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+        max-width: calc(100vw - 32px);
+        font-size: 0.85rem;
+        padding: 10px 20px;
+    }
+    
+    /* === FIX 13: WELCOME STATE POLISH MOBILE === */
+    .welcome-message {
+        padding: 32px 16px;
+    }
+    
+    .welcome-message .lock-icon {
+        font-size: 2.5rem;
+    }
+}
+
+/* === EXTRA SMALL SCREENS (< 360px) === */
+@media (max-width: 360px) {
+    .message-input-container {
+        padding: 8px 8px;
+    }
+
+    .message-input-row {
+        gap: 6px;
+    }
+
+    .btn-icon {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+    }
+
+    .btn-send {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        padding: 8px;
+    }
+
+    .message-form textarea {
+        padding: 8px 12px;
+        font-size: 16px; /* Prevent iOS zoom */
+    }
+
+    .reply-preview-bar {
+        padding: 8px 10px;
+    }
+    
+    .message {
+        max-width: 92%;
+    }
+}
+
+/* === LANDSCAPE MODE FIXES === */
+@media (max-height: 500px) and (orientation: landscape) {
+    .chat-header {
+        padding: 8px 16px;
+    }
+    
+    .room-info h2 {
+        font-size: 1rem;
+    }
+    
+    .messages-container {
+        padding: 8px 16px;
+    }
+    
+    .message-input-container {
+        padding: 8px 12px;
+    }
+    
+    .welcome-message {
+        padding: 16px;
+    }
+    
+    .welcome-message .lock-icon {
+        font-size: 2rem;
+        margin-bottom: 8px;
     }
 }

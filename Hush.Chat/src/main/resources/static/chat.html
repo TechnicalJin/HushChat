@@ -2,23 +2,28 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- FIX: Enhanced viewport for mobile - prevents zoom issues and handles iOS properly -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <!-- Ensure proper iOS status bar handling -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Chat Room - Hush.Chat</title>
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/chat.css">
 </head>
 <body>
 <div class="chat-container">
-    <!-- Chat Header -->
+    <!-- Chat Header - Compact design for mobile -->
     <header class="chat-header">
         <div class="room-info">
             <h2 id="roomName">Loading...</h2>
             <div class="room-meta">
-                <span class="room-code">Code: <strong id="roomCode">-----</strong></span>
+                <span class="room-code"><strong id="roomCode">-----</strong></span>
+                <span class="separator">•</span>
                 <span class="user-count" id="userCount">👥 0/10</span>
             </div>
         </div>
-        <button id="leaveRoomBtn" class="btn-leave">Leave Room</button>
+        <button id="leaveRoomBtn" class="btn-leave">Leave</button>
     </header>
 
     <!-- Messages Area -->
@@ -38,6 +43,23 @@
 
     <!-- Message Input -->
     <footer class="message-input-container">
+        <!-- FIX 8: Reply Preview Wrapper for smooth height animation (prevents scroll jump) -->
+        <div id="replyPreviewWrapper" class="reply-preview-wrapper">
+            <!-- Reply Preview Bar -->
+            <div id="replyPreviewBar" class="reply-preview-bar">
+                <div class="reply-preview-content">
+                    <div class="reply-preview-indicator"></div>
+                    <div class="reply-preview-info">
+                        <span class="reply-preview-sender" id="replyPreviewSender"></span>
+                        <span class="reply-preview-text" id="replyPreviewText"></span>
+                    </div>
+                    <!-- FIX 5: Type icon for reply type indicator -->
+                    <span class="reply-preview-type-icon" id="replyPreviewTypeIcon"></span>
+                </div>
+                <button type="button" class="reply-preview-close" id="replyPreviewClose" title="Cancel reply" aria-label="Cancel reply">✕</button>
+            </div>
+        </div>
+        
         <form id="messageForm" class="message-form">
             <div class="message-input-row">
                 <button type="button" id="filePickerBtn" class="btn-icon" title="Attach file">
@@ -51,7 +73,7 @@
                 />
                 <textarea
                         id="messageInput"
-                        placeholder="Type your message... (Shift+Enter for new line)"
+                        placeholder="Message..."
                         maxlength="5000"
                         autocomplete="off"
                         rows="1"
@@ -65,9 +87,7 @@
                 <span id="fileUploadName"></span>
                 <span id="fileUploadProgress"></span>
             </div>
-            <div class="input-info">
-                <span id="userName"></span>
-            </div>
+            <!-- REMOVED: "Chatting as: Username" text - not needed per UX requirements -->
         </form>
     </footer>
 </div>
@@ -112,7 +132,7 @@
     document.getElementById('roomCode').textContent = roomCode;
     document.getElementById('roomName').textContent = roomName || 'Chat Room';
     document.getElementById('welcomeRoomName').textContent = roomName || 'Chat Room';
-    document.getElementById('userName').textContent = `Chatting as: ${userName}`;
+    // REMOVED: "Chatting as: Username" display - not needed per UX requirements
 
     // Track if room info fetch should continue
     let roomInfoActive = true;

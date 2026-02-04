@@ -16,6 +16,24 @@ const chat = {
     activeContextMenu: null,
     editingMessageId: null,
     originalMessageContent: null,
+    activeContextMessageId: null, // FIX 12: Track which message has context menu open
+    
+    // Reply system state
+    replyToMessage: null, // Stores the message being replied to
+    replyPreviewWrapper: null, // FIX 8: Wrapper element for smooth animation
+    
+    // FIX 1: Improved swipe gesture state (mobile)
+    touchStartX: 0,
+    touchStartY: 0,
+    touchCurrentX: 0,
+    touchCurrentY: 0,
+    swipeThreshold: 80, // px needed to trigger reply
+    activeSwipeElement: null,
+    isScrolling: false, // FIX: Detect vertical scrolling vs horizontal swipe
+    touchStartTime: 0, // FIX: Track touch duration for gesture differentiation
+    
+    // FIX 7: Message grouping - track last sender for clustering
+    lastRenderedSenderId: null,
     
     // Scroll-to-bottom state
     scrollToBottomBtn: null,
@@ -23,6 +41,9 @@ const chat = {
     unreadCount: 0,
     isUserAtBottom: true,
     scrollThreshold: 100, // px from bottom to consider "at bottom"
+    
+    // FIX 10: Toast notification queue
+    activeToast: null,
     
     /**
      * Initialize chat module
@@ -44,6 +65,9 @@ const chat = {
         this.scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
         this.unreadBadge = document.getElementById('unreadBadge');
         
+        // FIX 8: Create reply preview wrapper for smooth height animation
+        this.setupReplyPreviewWrapper();
+        
         if (!this.roomCode || !this.userId || !this.userName) {
             console.error('Missing room or user info');
             window.location.href = 'index.html';
@@ -52,8 +76,72 @@ const chat = {
         
         this.setupEventListeners();
         this.setupScrollListener();
+        this.setupReplyPreviewListeners();
+        this.setupMobileViewportFix(); // FIX: Handle mobile viewport issues
         this.startExpiryCountdownUpdater();
         console.log('Chat initialized for room:', this.roomCode);
+    },
+    
+    /**
+     * FIX 8: Setup reply preview wrapper for smooth height animation
+     * The wrapper is now in HTML, we just need to get the reference
+     */
+    setupReplyPreviewWrapper() {
+        const wrapper = document.getElementById('replyPreviewWrapper');
+        if (wrapper) {
+            this.replyPreviewWrapper = wrapper;
+        }
+    },
+    
+    /**
+     * FIX: Handle mobile viewport height issues
+     * Mobile browsers have dynamic toolbars that change viewport height
+     * This ensures input bar is always visible
+     */
+    setupMobileViewportFix() {
+        // Only apply on mobile
+        if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return;
+        
+        // Use visualViewport API if available (better than resize event)
+        if (window.visualViewport) {
+            const handleViewportChange = () => {
+                // Set CSS custom property for actual viewport height
+                const vh = window.visualViewport.height * 0.01;
+                document.documentElement.style.setProperty('--vh', `${vh}px`);
+                
+                // Ensure input bar is visible when keyboard opens
+                const inputContainer = document.querySelector('.message-input-container');
+                if (inputContainer) {
+                    // Scroll input into view if keyboard is open
+                    if (window.visualViewport.height < window.innerHeight * 0.7) {
+                        // Keyboard is likely open
+                        inputContainer.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    }
+                }
+            };
+            
+            window.visualViewport.addEventListener('resize', handleViewportChange);
+            window.visualViewport.addEventListener('scroll', handleViewportChange);
+            handleViewportChange(); // Initial call
+        } else {
+            // Fallback for browsers without visualViewport API
+            const setVh = () => {
+                const vh = window.innerHeight * 0.01;
+                document.documentElement.style.setProperty('--vh', `${vh}px`);
+            };
+            window.addEventListener('resize', setVh);
+            setVh();
+        }
+    },
+    
+    /**
+     * Setup reply preview bar listeners
+     */
+    setupReplyPreviewListeners() {
+        const closeBtn = document.getElementById('replyPreviewClose');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.cancelReply());
+        }
     },
     
     /**
@@ -106,10 +194,20 @@ const chat = {
             }
         });
         
+        // FIX: Also close context menu on scroll (mobile UX improvement)
+        if (this.messagesContainer) {
+            this.messagesContainer.addEventListener('scroll', () => {
+                if (this.activeContextMenu) {
+                    this.closeContextMenu();
+                }
+            }, { passive: true });
+        }
+        
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.closeContextMenu();
                 this.cancelEdit();
+                this.cancelReply();
             }
         });
     },
@@ -228,17 +326,30 @@ const chat = {
     },
     
     /**
-     * Auto-grow textarea based on content
+     * FIX 9: Auto-grow textarea based on content with smooth animation
+     * Max height is 4-5 lines, then internal scroll
      */
     autoGrowTextarea() {
         if (!this.messageInput) return;
         
+        // Store current scroll position to prevent jump
+        const scrollPos = this.messagesContainer?.scrollTop;
+        
         // Reset height to auto to get correct scrollHeight
         this.messageInput.style.height = 'auto';
         
-        // Set new height based on content (max 150px defined in CSS)
-        const newHeight = Math.min(this.messageInput.scrollHeight, 150);
+        // Get max height from CSS (120px on mobile, 150px on desktop)
+        const isMobile = window.innerWidth <= 768;
+        const maxHeight = isMobile ? 120 : 150;
+        
+        // Set new height based on content
+        const newHeight = Math.min(this.messageInput.scrollHeight, maxHeight);
         this.messageInput.style.height = newHeight + 'px';
+        
+        // Restore scroll position to prevent jump
+        if (this.messagesContainer && scrollPos !== undefined) {
+            this.messagesContainer.scrollTop = scrollPos;
+        }
     },
     
     /**
@@ -332,7 +443,7 @@ const chat = {
     },
     
     /**
-     * Send a message
+     * Send a message (with optional reply)
      */
     async sendMessage() {
         const content = this.messageInput.value.trim();
@@ -352,16 +463,33 @@ const chat = {
         this.messageInput.disabled = true;
         
         try {
-            const response = await api.post('/messages/send', {
+            // Build request payload with optional reply metadata
+            const payload = {
                 roomCode: this.roomCode,
                 userId: this.userId,
                 content: content
-            }, false);  // No auth required
+            };
+            
+            // Attach reply metadata if replying to a message
+            if (this.replyToMessage) {
+                payload.replyTo = {
+                    messageId: this.replyToMessage.messageId,
+                    senderId: this.replyToMessage.senderId,
+                    senderName: this.replyToMessage.senderName,
+                    messageType: this.replyToMessage.type || 'TEXT',
+                    previewText: this.replyToMessage.content
+                };
+            }
+            
+            const response = await api.post('/messages/send', payload, false);
             
             if (response.success) {
                 // Clear input and reset height
                 this.messageInput.value = '';
                 this.messageInput.style.height = 'auto';
+                
+                // Clear reply state
+                this.cancelReply();
                 
                 // Render the sent message immediately
                 this.renderMessage(response.data, true);
@@ -464,6 +592,8 @@ const chat = {
     
     /**
      * Render a single message
+     * FIX 7: Implements message grouping for same-sender clusters
+     * FIX 13: Implements welcome message fade-out on first message
      */
     renderMessage(message, isOwn = null) {
         // Prevent duplicate messages
@@ -472,16 +602,44 @@ const chat = {
         }
         this.displayedMessageIds.add(message.messageId);
         
+        // FIX 13: Fade out welcome message on first real message
+        if (this.displayedMessageIds.size === 1) {
+            const welcomeMessage = this.messagesContainer.querySelector('.welcome-message');
+            if (welcomeMessage) {
+                welcomeMessage.classList.add('fading-out');
+                // Remove from DOM after animation completes
+                setTimeout(() => {
+                    welcomeMessage.remove();
+                }, 500);
+            }
+        }
+        
         // Determine if message is from current user
         if (isOwn === null) {
             isOwn = message.senderId === this.userId;
         }
         
+        // FIX 7: Message grouping - check if same sender as previous message
+        const isSameSender = this.lastRenderedSenderId === message.senderId;
+        const showSenderName = !isSameSender;
+        
         const messageDiv = document.createElement('div');
         const isFile = message.type === 'FILE';
-        messageDiv.className = `message ${isOwn ? 'message-own' : 'message-other'} ${isFile ? 'message-file' : ''}`;
+        
+        // Build class list with grouping classes
+        let classNames = `message ${isOwn ? 'message-own' : 'message-other'}`;
+        if (isFile) classNames += ' message-file';
+        if (isSameSender) {
+            classNames += ' message-grouped';
+        } else {
+            classNames += ' message-new-sender';
+        }
+        
+        messageDiv.className = classNames;
         messageDiv.dataset.messageId = message.messageId;
         messageDiv.dataset.senderId = message.senderId;
+        // FIX: Store sender name in data attribute for reliable retrieval (even when header hidden)
+        messageDiv.dataset.senderName = message.senderName || '';
         
         // Store expiry time for countdown
         if (message.expiryTime) {
@@ -525,13 +683,9 @@ const chat = {
         // Store original content for edit functionality
         messageDiv.dataset.originalContent = message.content;
         
-        // Determine if sender name should be shown (group consecutive messages)
-        let showSenderName = true;
-        const lastMessage = this.messagesContainer.querySelector('.message:last-of-type');
-        if (lastMessage && lastMessage.dataset && lastMessage.dataset.senderId === message.senderId) {
-            showSenderName = false;
-        }
-
+        // FIX 7: Update last rendered sender for grouping (already calculated above)
+        // Update AFTER we've used the comparison
+        
         let bodyHtml;
         if (isFile) {
             const fileLabel = this.escapeHtml(message.content);
@@ -557,6 +711,9 @@ const chat = {
         } else {
             bodyHtml = `<div id="${contentId}" class="${contentClasses}">${this.escapeHtml(message.content)}</div>`;
         }
+        
+        // Build reply container HTML if this message is a reply
+        const replyContainerHtml = this.buildReplyContainerHtml(message);
 
         const senderHeaderHtml = showSenderName
             ? `<div class="message-header">
@@ -571,17 +728,30 @@ const chat = {
             </div>
         `;
 
+        // Action button shown for ALL messages (not just own) for reply/copy access
         messageDiv.innerHTML = `
             ${senderHeaderHtml}
             <div class="message-bubble-wrapper">
+                ${replyContainerHtml}
                 ${bodyHtml}
-                ${isOwn && !isFile ? `<button class="message-action-btn" data-message-id="${message.messageId}" title="Message options">▼</button>` : ''}
+                <button class="message-action-btn" data-message-id="${message.messageId}" title="Message options">▼</button>
             </div>
             ${isLongMessage ? `<button id="${btnId}" class="read-more-btn" data-content-id="${contentId}">Read More ▼</button>` : ''}
             ${footerHtml}
         `;
         
         this.messagesContainer.appendChild(messageDiv);
+        
+        // FIX 7: Update last rendered sender AFTER appending to maintain grouping state
+        this.lastRenderedSenderId = message.senderId;
+        
+        // Attach reply container click handler for scroll-to-original
+        const replyContainer = messageDiv.querySelector('.reply-container');
+        if (replyContainer && message.replyTo && !message.replyTo.deleted) {
+            replyContainer.addEventListener('click', () => {
+                this.scrollToMessage(message.replyTo.messageId);
+            });
+        }
         
         // Attach file click handler for image preview
         if (isFile) {
@@ -601,22 +771,23 @@ const chat = {
             }
         }
 
-        // Attach action button click handler for own messages
-        if (isOwn) {
-            const actionBtn = messageDiv.querySelector('.message-action-btn');
-            if (actionBtn) {
-                actionBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.showContextMenu(e, message.messageId);
-                });
-            }
-            
-            // Right-click context menu for own messages
-            messageDiv.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                this.showContextMenu(e, message.messageId);
+        // Attach action button click handler for ALL messages
+        const actionBtn = messageDiv.querySelector('.message-action-btn');
+        if (actionBtn) {
+            actionBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.showContextMenu(e, message.messageId, isOwn);
             });
         }
+        
+        // Right-click context menu for ALL messages
+        messageDiv.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this.showContextMenu(e, message.messageId, isOwn);
+        });
+        
+        // Setup swipe-to-reply for mobile (touch devices)
+        this.setupSwipeToReply(messageDiv, message);
         
         // Attach click handler for Read More button
         if (isLongMessage) {
@@ -637,6 +808,246 @@ const chat = {
             }
             this.scrollToBottom();
         }
+    },
+    
+    /**
+     * Build HTML for reply container (shown inside message bubble)
+     * FIX 5: Shows message type indicators
+     * FIX 6: Improved deleted message styling
+     * FIX: Shows "You" for own message replies
+     */
+    buildReplyContainerHtml(message) {
+        if (!message.replyTo) return '';
+        
+        const replyTo = message.replyTo;
+        
+        // FIX 6: If original message was deleted - show with trash icon and italic
+        if (replyTo.deleted) {
+            return `
+                <div class="reply-container reply-container-deleted">
+                    <span class="reply-deleted-text">Original message deleted</span>
+                </div>
+            `;
+        }
+        
+        // FIX 5: Get type icon based on message type for clarity
+        const typeIcon = this.getMessageTypeIcon(replyTo.messageType);
+        
+        // FIX: Show "You" for replies to own messages
+        const isOwnReply = replyTo.senderId === this.userId;
+        const displayName = isOwnReply ? 'You' : (replyTo.senderName || 'Unknown');
+        
+        // Truncate preview text
+        let previewText = replyTo.previewText || '';
+        if (previewText.length > 50) {
+            previewText = previewText.substring(0, 50) + '...';
+        }
+        
+        return `
+            <div class="reply-container" data-reply-message-id="${replyTo.messageId}">
+                <span class="reply-sender">${this.escapeHtml(displayName)}</span>
+                <span class="reply-text">
+                    <span class="reply-type-icon">${typeIcon}</span>
+                    ${this.escapeHtml(previewText)}
+                </span>
+            </div>
+        `;
+    },
+    
+    /**
+     * FIX 5: Get icon for message type - provides visual clarity for reply types
+     */
+    getMessageTypeIcon(type) {
+        switch (type) {
+            case 'FILE':
+                return '📎';
+            case 'IMAGE':
+                return '🖼️';
+            case 'VIDEO':
+                return '🎬';
+            case 'PDF':
+                return '📄';
+            case 'TEXT':
+            default:
+                return '💬';
+        }
+    },
+    
+    /**
+     * FIX 6: Scroll to a specific message and highlight it
+     * Disabled for deleted messages
+     */
+    scrollToMessage(messageId) {
+        const targetMessage = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+        if (targetMessage) {
+            // Scroll to message
+            targetMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Add highlight animation
+            targetMessage.classList.add('message-highlighted');
+            
+            // Remove highlight after animation
+            setTimeout(() => {
+                targetMessage.classList.remove('message-highlighted');
+            }, 1500);
+        } else {
+            // Message not found (might have expired or been deleted)
+            this.showToast('Original message is no longer available', 'info');
+        }
+    },
+    
+    /**
+     * FIX 1: Setup swipe-to-reply and long-press for context menu on mobile
+     * CRITICAL: Prevents gesture conflicts between scroll, swipe, and long-press
+     * - Swipe right → Reply
+     * - Long press → Open context menu
+     * - Single tap → Do nothing
+     * - Vertical scroll → Normal scrolling (never triggers menu or reply)
+     */
+    setupSwipeToReply(messageDiv, message) {
+        let startX = 0;
+        let startY = 0;
+        let currentX = 0;
+        let currentY = 0;
+        let isSwiping = false;
+        let isScrolling = false;
+        let longPressTimer = null;
+        let touchStartTime = 0;
+        let hasMoved = false;
+        
+        const LONG_PRESS_DURATION = 500; // ms
+        const SWIPE_THRESHOLD = 80; // px to trigger reply
+        const SCROLL_THRESHOLD = 15; // px of vertical movement to consider scrolling
+        const MOVEMENT_THRESHOLD = 10; // px of any movement to cancel long-press
+        
+        // FIX: Use userId for ownership check
+        const isOwn = message.senderId === this.userId;
+        
+        const cancelLongPress = () => {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        };
+        
+        const resetSwipeVisual = () => {
+            messageDiv.style.transform = '';
+            messageDiv.style.transition = 'transform 0.2s ease';
+        };
+        
+        messageDiv.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+            currentX = startX;
+            currentY = startY;
+            touchStartTime = Date.now();
+            isSwiping = true;
+            isScrolling = false;
+            hasMoved = false;
+            
+            // Remove transition for immediate visual feedback
+            messageDiv.style.transition = 'none';
+            
+            // Start long-press timer for context menu
+            longPressTimer = setTimeout(() => {
+                // Only trigger if user hasn't moved significantly
+                if (!hasMoved && !isScrolling) {
+                    // FIX 10: Vibrate for haptic feedback if supported
+                    if (navigator.vibrate) {
+                        navigator.vibrate(50);
+                    }
+                    
+                    // Create a synthetic event for context menu positioning
+                    const touchEvent = {
+                        preventDefault: () => {},
+                        clientX: e.touches[0].clientX,
+                        clientY: e.touches[0].clientY
+                    };
+                    this.showContextMenu(touchEvent, message.messageId, isOwn);
+                    
+                    // Prevent swipe from triggering after long-press
+                    isSwiping = false;
+                    resetSwipeVisual();
+                }
+            }, LONG_PRESS_DURATION);
+        }, { passive: true });
+        
+        messageDiv.addEventListener('touchmove', (e) => {
+            if (!isSwiping) return;
+            
+            currentX = e.touches[0].clientX;
+            currentY = e.touches[0].clientY;
+            
+            const deltaX = currentX - startX;
+            const deltaY = currentY - startY;
+            const absDeltaX = Math.abs(deltaX);
+            const absDeltaY = Math.abs(deltaY);
+            
+            // FIX: Detect if user is scrolling vertically (not swiping)
+            if (!hasMoved && absDeltaY > SCROLL_THRESHOLD && absDeltaY > absDeltaX) {
+                isScrolling = true;
+                cancelLongPress();
+                resetSwipeVisual();
+                return; // Let the scroll happen naturally
+            }
+            
+            // Any significant movement cancels long-press
+            if (absDeltaX > MOVEMENT_THRESHOLD || absDeltaY > MOVEMENT_THRESHOLD) {
+                hasMoved = true;
+                cancelLongPress();
+            }
+            
+            // Only allow swipe right (positive delta) for reply, and only if not scrolling
+            if (!isScrolling && deltaX > MOVEMENT_THRESHOLD && absDeltaY < 30) {
+                // Add visual feedback with clamped transform
+                const translateX = Math.min(deltaX * 0.6, 60); // Dampen and cap movement
+                messageDiv.style.transform = `translateX(${translateX}px)`;
+            }
+        }, { passive: true });
+        
+        messageDiv.addEventListener('touchend', (e) => {
+            cancelLongPress();
+            
+            if (!isSwiping) {
+                resetSwipeVisual();
+                return;
+            }
+            
+            const deltaX = currentX - startX;
+            const touchDuration = Date.now() - touchStartTime;
+            
+            // Reset visual state
+            resetSwipeVisual();
+            
+            // FIX: Only trigger reply if:
+            // 1. Not scrolling
+            // 2. Swiped far enough
+            // 3. Touch was intentional (not too quick, not too slow)
+            if (!isScrolling && deltaX > SWIPE_THRESHOLD && touchDuration > 100 && touchDuration < 800) {
+                // FIX 10: Haptic feedback for successful swipe
+                if (navigator.vibrate) {
+                    navigator.vibrate(30);
+                }
+                this.startReply(message);
+            }
+            
+            // Reset state
+            isSwiping = false;
+            isScrolling = false;
+            hasMoved = false;
+            startX = 0;
+            startY = 0;
+            currentX = 0;
+            currentY = 0;
+        });
+        
+        messageDiv.addEventListener('touchcancel', () => {
+            cancelLongPress();
+            isSwiping = false;
+            isScrolling = false;
+            hasMoved = false;
+            resetSwipeVisual();
+        });
     },
     
     /**
@@ -833,101 +1244,372 @@ const chat = {
     },
     
     /**
-     * Show error message
+     * Show error message (legacy wrapper using toast system)
      */
     showError(message) {
-        // Create a temporary error toast
-        const toast = document.createElement('div');
-        toast.className = 'error-toast';
-        toast.textContent = message;
-        toast.style.cssText = `
-            position: fixed;
-            bottom: 100px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #ef4444;
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            z-index: 1000;
-            animation: fadeIn 0.3s ease;
-        `;
-        document.body.appendChild(toast);
-        
-        setTimeout(() => {
-            toast.remove();
-        }, 3000);
+        this.showToast(message, 'error');
     },
     
     /**
-     * Show context menu for message actions
+     * FIX 2 & 12: Show context menu for message actions
+     * - Properly clamped to viewport bounds (never overflows)
+     * - Auto-flips vertically if near bottom
+     * - Shifts horizontally if near screen edge
+     * - Highlights active message
+     * @param {Event} event - The click/right-click event
+     * @param {string} messageId - The message ID
+     * @param {boolean} isOwnMessage - Whether this is the current user's message
      */
-    showContextMenu(event, messageId) {
-        // Close any existing menu
+    showContextMenu(event, messageId, isOwnMessage = null) {
+        // Close any existing menu and clear previous highlight
         this.closeContextMenu();
+        
+        // Get message data from DOM if isOwnMessage not provided
+        if (isOwnMessage === null) {
+            const messageDiv = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+            if (messageDiv) {
+                isOwnMessage = messageDiv.dataset.senderId === this.userId;
+            }
+        }
+        
+        // Get message data for reply/copy
+        const messageDiv = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+        const messageData = this.getMessageDataFromDom(messageDiv);
+        
+        // FIX 12: Add highlight to active message
+        if (messageDiv) {
+            messageDiv.classList.add('message-context-active');
+            this.activeContextMessageId = messageId;
+        }
         
         const menu = document.createElement('div');
         menu.className = 'message-context-menu';
-        menu.innerHTML = `
-            <button class="context-menu-item" data-action="edit">
-                <span class="context-menu-icon">✏️</span>
-                <span>Edit Message</span>
+        
+        // Build menu items based on ownership
+        // Reply & Copy are available for ALL messages
+        // Edit & Unsend are ONLY for own messages
+        let menuHtml = `
+            <button class="context-menu-item" data-action="reply">
+                <span class="context-menu-icon">↩️</span>
+                <span>Reply</span>
             </button>
-            <button class="context-menu-item context-menu-item-danger" data-action="unsend">
-                <span class="context-menu-icon">🗑️</span>
-                <span>Unsend Message</span>
+            <button class="context-menu-item" data-action="copy">
+                <span class="context-menu-icon">📋</span>
+                <span>Copy</span>
             </button>
         `;
+        
+        // Add Edit & Unsend only for own messages
+        if (isOwnMessage) {
+            const isFileMessage = messageDiv && messageDiv.classList.contains('message-file');
+            
+            // Only allow edit for text messages, not files
+            if (!isFileMessage) {
+                menuHtml += `
+                    <div class="context-menu-divider"></div>
+                    <button class="context-menu-item" data-action="edit">
+                        <span class="context-menu-icon">✏️</span>
+                        <span>Edit Message</span>
+                    </button>
+                `;
+            }
+            
+            menuHtml += `
+                ${isFileMessage ? '<div class="context-menu-divider"></div>' : ''}
+                <button class="context-menu-item context-menu-item-danger" data-action="unsend">
+                    <span class="context-menu-icon">🗑️</span>
+                    <span>Unsend Message</span>
+                </button>
+            `;
+        }
+        
+        menu.innerHTML = menuHtml;
         
         document.body.appendChild(menu);
         this.activeContextMenu = menu;
         
-        // Position menu near the click/button
-        const menuWidth = 180;
-        const menuHeight = menu.offsetHeight || 80;
-        let x = event.clientX || event.pageX;
-        let y = event.clientY || event.pageY;
-        
-        // Adjust if menu goes off screen
-        if (x + menuWidth > window.innerWidth) {
-            x = window.innerWidth - menuWidth - 10;
-        }
-        if (y + menuHeight > window.innerHeight) {
-            y = window.innerHeight - menuHeight - 10;
-        }
-        
-        menu.style.left = x + 'px';
-        menu.style.top = y + 'px';
+        // FIX 2: Better menu positioning with viewport clamping
+        // Wait for menu to render to get accurate dimensions
+        requestAnimationFrame(() => {
+            const menuRect = menu.getBoundingClientRect();
+            const menuWidth = menuRect.width || 200;
+            const menuHeight = menuRect.height || 200;
+            
+            // Get touch/click position
+            let x = event.clientX || event.pageX || window.innerWidth / 2;
+            let y = event.clientY || event.pageY || window.innerHeight / 2;
+            
+            // Get viewport dimensions
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            
+            // Get input bar height for bottom constraint
+            const inputBarHeight = document.querySelector('.message-input-container')?.offsetHeight || 80;
+            const safeAreaBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-area-bottom') || '0') || 0;
+            
+            // Calculate maximum allowed Y position
+            const maxY = viewportHeight - inputBarHeight - safeAreaBottom - 10;
+            const minY = 10;
+            const minX = 10;
+            const maxX = viewportWidth - menuWidth - 10;
+            
+            // FIX 2: Auto-flip vertically if near bottom
+            if (y + menuHeight > maxY) {
+                // Try to flip above the touch point
+                const flippedY = y - menuHeight - 10;
+                if (flippedY >= minY) {
+                    y = flippedY;
+                } else {
+                    // Clamp to maximum visible area
+                    y = Math.max(minY, maxY - menuHeight);
+                }
+            }
+            
+            // FIX 2: Shift horizontally if near screen edge
+            if (x + menuWidth > maxX + menuWidth) {
+                x = maxX;
+            }
+            if (x < minX) {
+                x = minX;
+            }
+            
+            // Final clamp to ensure menu is fully visible
+            x = Math.max(minX, Math.min(x, maxX));
+            y = Math.max(minY, Math.min(y, maxY - menuHeight));
+            
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+        });
         
         // Add click handlers for menu items
         menu.querySelectorAll('.context-menu-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 const action = item.dataset.action;
-                this.handleMessageAction(action, messageId);
+                this.handleMessageAction(action, messageId, messageData);
                 this.closeContextMenu();
             });
         });
     },
     
     /**
-     * Close the context menu
+     * Extract message data from DOM element
+     * FIX: Properly get sender name even when message header is hidden (grouped messages)
+     */
+    getMessageDataFromDom(messageDiv) {
+        if (!messageDiv) return null;
+        
+        const senderId = messageDiv.dataset.senderId;
+        const isOwnMessage = senderId === this.userId;
+        
+        // Get sender name from data attribute first, then fallback to header text
+        let senderName = messageDiv.dataset.senderName 
+            || messageDiv.querySelector('.message-sender')?.textContent 
+            || (isOwnMessage ? this.userName : 'Unknown');
+        
+        return {
+            messageId: messageDiv.dataset.messageId,
+            senderId: senderId,
+            senderName: senderName,
+            content: messageDiv.dataset.originalContent || '',
+            type: messageDiv.classList.contains('message-file') ? 'FILE' : 'TEXT'
+        };
+    },
+    
+    /**
+     * FIX 12: Close the context menu and clear active message highlight
      */
     closeContextMenu() {
         if (this.activeContextMenu) {
             this.activeContextMenu.remove();
             this.activeContextMenu = null;
         }
+        
+        // FIX 12: Clear active message highlight
+        if (this.activeContextMessageId) {
+            const messageDiv = this.messagesContainer?.querySelector(`[data-message-id="${this.activeContextMessageId}"]`);
+            if (messageDiv) {
+                messageDiv.classList.remove('message-context-active');
+            }
+            this.activeContextMessageId = null;
+        }
     },
     
     /**
-     * Handle message action (edit or unsend)
+     * Handle message action (reply, copy, edit, or unsend)
      */
-    handleMessageAction(action, messageId) {
-        if (action === 'edit') {
-            this.startEditMessage(messageId);
-        } else if (action === 'unsend') {
-            this.unsendMessage(messageId);
+    handleMessageAction(action, messageId, messageData) {
+        switch (action) {
+            case 'reply':
+                this.startReply(messageData);
+                break;
+            case 'copy':
+                this.copyMessageContent(messageData);
+                break;
+            case 'edit':
+                this.startEditMessage(messageId);
+                break;
+            case 'unsend':
+                this.unsendMessage(messageId);
+                break;
         }
+    },
+    
+    /**
+     * FIX 8 & 10: Start replying to a message
+     * Uses wrapper for smooth height animation to prevent scroll jump
+     * Shows visual feedback toast
+     * FIX: Shows 'yourself' when replying to own message
+     */
+    startReply(message) {
+        if (!message) return;
+        
+        // Store the message being replied to
+        this.replyToMessage = message;
+        
+        // Determine display name - show 'yourself' for own messages
+        const isOwnMessage = message.senderId === this.userId;
+        const displayName = isOwnMessage ? 'yourself' : (message.senderName || 'Unknown');
+        
+        // Show reply preview bar
+        const previewBar = document.getElementById('replyPreviewBar');
+        const senderEl = document.getElementById('replyPreviewSender');
+        const textEl = document.getElementById('replyPreviewText');
+        const iconEl = document.getElementById('replyPreviewTypeIcon');
+        
+        if (previewBar && senderEl && textEl && iconEl) {
+            // Set sender name
+            senderEl.textContent = `Replying to ${displayName}`;
+            
+            // Set preview text (truncated)
+            let previewText = message.content || '';
+            if (previewText.length > 60) {
+                previewText = previewText.substring(0, 60) + '...';
+            }
+            textEl.textContent = previewText;
+            
+            // FIX 5: Set type icon for visual clarity
+            iconEl.textContent = this.getMessageTypeIcon(message.type);
+            
+            // FIX 8: Show with smooth animation using wrapper
+            if (this.replyPreviewWrapper) {
+                this.replyPreviewWrapper.classList.add('visible');
+            } else {
+                // Fallback if wrapper not setup
+                previewBar.style.display = 'flex';
+            }
+        }
+        
+        // FIX 10: Show visual feedback
+        this.showToast(`Replying to ${displayName}`, 'info');
+        
+        // Focus input
+        if (this.messageInput) {
+            this.messageInput.focus();
+        }
+    },
+    
+    /**
+     * FIX 8: Cancel reply mode with smooth animation
+     */
+    cancelReply() {
+        this.replyToMessage = null;
+        
+        // FIX 8: Hide with smooth animation using wrapper
+        if (this.replyPreviewWrapper) {
+            this.replyPreviewWrapper.classList.remove('visible');
+        } else {
+            // Fallback if wrapper not setup
+            const previewBar = document.getElementById('replyPreviewBar');
+            if (previewBar) {
+                previewBar.style.display = 'none';
+            }
+        }
+    },
+    
+    /**
+     * FIX 10: Copy message content to clipboard with visual feedback
+     */
+    async copyMessageContent(message) {
+        if (!message || !message.content) {
+            this.showToast('No content to copy', 'error');
+            return;
+        }
+        
+        try {
+            // Use clipboard API with proper escaping
+            await navigator.clipboard.writeText(message.content);
+            
+            // FIX 10: Haptic feedback on mobile
+            if (navigator.vibrate) {
+                navigator.vibrate(30);
+            }
+            
+            // FIX 10: Show success toast
+            this.showToast('Copied to clipboard', 'success');
+        } catch (error) {
+            console.error('Failed to copy:', error);
+            
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = message.content;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-9999px';
+            document.body.appendChild(textArea);
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                this.showToast('Copied to clipboard', 'success');
+            } catch (e) {
+                this.showToast('Failed to copy message', 'error');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+    },
+    
+    /**
+     * FIX 10: Show toast notification with animation
+     * @param {string} message - Toast message
+     * @param {string} type - 'success', 'error', or 'info'
+     */
+    showToast(message, type = 'info') {
+        // Remove existing toast if any
+        if (this.activeToast) {
+            this.activeToast.remove();
+            this.activeToast = null;
+        }
+        
+        const toast = document.createElement('div');
+        toast.className = `toast-notification toast-${type}`;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        this.activeToast = toast;
+        
+        // Trigger animation
+        requestAnimationFrame(() => {
+            toast.classList.add('visible');
+        });
+        
+        // Auto-dismiss
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.remove();
+                }
+                if (this.activeToast === toast) {
+                    this.activeToast = null;
+                }
+            }, 300);
+        }, 2000);
+    },
+    
+    /**
+     * Show success toast message (legacy wrapper)
+     */
+    showSuccess(message) {
+        this.showToast(message, 'success');
     },
     
     /**
@@ -1121,6 +1803,8 @@ const chat = {
     cleanup() {
         this.stopExpiryCountdownUpdater();
         this.closeContextMenu();
+        this.cancelReply();
+        this.cancelEdit();
         
         // Hide scroll-to-bottom button
         if (this.scrollToBottomBtn) {
@@ -1128,6 +1812,15 @@ const chat = {
             this.scrollToBottomBtn.classList.remove('visible');
         }
         this.unreadCount = 0;
+        
+        // FIX: Reset message grouping state
+        this.lastRenderedSenderId = null;
+        
+        // FIX: Clear any active toast
+        if (this.activeToast) {
+            this.activeToast.remove();
+            this.activeToast = null;
+        }
         
         localStorage.removeItem('roomCode');
         localStorage.removeItem('roomName');

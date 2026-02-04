@@ -28,7 +28,7 @@ public class MessageController {
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
     
     /**
-     * Send a message to a room
+     * Send a message to a room (with optional reply support)
      * POST /api/messages/send
      */
     @PostMapping("/send")
@@ -38,12 +38,14 @@ public class MessageController {
         String roomCode = dto.getRoomCode().toUpperCase();
         String userId = dto.getUserId();
         
-        log.info("Sending message to room: {} by user: {}", roomCode, userId);
+        log.info("Sending message to room: {} by user: {}{}", roomCode, userId,
+                 dto.getReplyTo() != null ? " (reply)" : "");
         
         MessageResponseDto message = messageService.sendMessage(
                 roomCode, 
                 userId, 
-                dto.getContent()
+                dto.getContent(),
+                dto.getReplyTo()
         );
         
         return ResponseEntity.ok(

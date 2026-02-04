@@ -2,6 +2,7 @@ package com.code.HushChat.service;
 
 import com.code.HushChat.config.AppConfig;
 import com.code.HushChat.dto.MessageResponseDto;
+import com.code.HushChat.dto.SendMessageDto;
 import com.code.HushChat.exception.RoomNotFoundException;
 import com.code.HushChat.exception.UnauthorizedException;
 import com.code.HushChat.model.ChatMessage;
@@ -28,10 +29,21 @@ public class MessageService {
     private final RoomService roomService;
     private final AppConfig appConfig;
     
+    // Maximum preview text length for replies
+    private static final int MAX_PREVIEW_LENGTH = 100;
+    
     /**
-     * Send a message to a room
+     * Send a message to a room (with optional reply support)
      */
     public MessageResponseDto sendMessage(String roomCode, String userId, String content) {
+        return sendMessage(roomCode, userId, content, null);
+    }
+    
+    /**
+     * Send a message to a room with optional reply metadata
+     */
+    public MessageResponseDto sendMessage(String roomCode, String userId, String content, 
+                                           SendMessageDto.ReplyToRequest replyToRequest) {
         // Validate room exists
         ChatRoom room = roomStore.get(roomCode);
         if (room == null || room.isExpired()) {
@@ -53,6 +65,28 @@ public class MessageService {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime expiryTime = now.plusMinutes(appConfig.getMessage().getTtlMinutes());
         
+        // Build reply metadata if provided
+        ChatMessage.ReplyTo replyTo = null;
+        if (replyToRequest != null && replyToRequest.getMessageId() != null) {
+            // Validate the replied message exists (optional, for robustness)
+            ChatMessage repliedMessage = messageStore.getMessage(roomCode, replyToRequest.getMessageId());
+            
+            // Build reply metadata with truncated preview
+            String previewText = replyToRequest.getPreviewText();
+            if (previewText != null && previewText.length() > MAX_PREVIEW_LENGTH) {
+                previewText = previewText.substring(0, MAX_PREVIEW_LENGTH) + "...";
+            }
+            
+            replyTo = ChatMessage.ReplyTo.builder()
+                    .messageId(replyToRequest.getMessageId())
+                    .senderId(replyToRequest.getSenderId())
+                    .senderName(replyToRequest.getSenderName())
+                    .messageType(replyToRequest.getMessageType())
+                    .previewText(previewText)
+                    .deleted(repliedMessage != null && repliedMessage.isDeleted())
+                    .build();
+        }
+        
         ChatMessage message = ChatMessage.builder()
                 .messageId(UUID.randomUUID().toString())
                 .roomCode(roomCode)
@@ -61,6 +95,7 @@ public class MessageService {
                 .type(ChatMessage.MessageType.TEXT)
                 .timestamp(now)
                 .expiryTime(expiryTime)
+                .replyTo(replyTo)
                 .build();
         
         // Save message
@@ -69,7 +104,8 @@ public class MessageService {
         // Update room activity
         roomService.updateRoomActivity(roomCode);
         
-        log.debug("Message sent in room {} by user {}", roomCode, userId);
+        log.debug("Message sent in room {} by user {}{}", roomCode, userId, 
+                  replyTo != null ? " (reply to " + replyTo.getMessageId() + ")" : "");
         
         return toMessageResponseDto(message, senderName);
     }
@@ -190,6 +226,25 @@ public class MessageService {
      * Convert ChatMessage to MessageResponseDto
      */
     private MessageResponseDto toMessageResponseDto(ChatMessage message, String senderName) {
+        // Convert reply metadata if present
+        MessageResponseDto.ReplyToDto replyToDto = null;
+        if (message.getReplyTo() != null) {
+            ChatMessage.ReplyTo replyTo = message.getReplyTo();
+            
+            // Check if original message still exists and update deleted status
+            ChatMessage originalMessage = messageStore.getMessage(message.getRoomCode(), replyTo.getMessageId());
+            boolean isDeleted = originalMessage == null || originalMessage.isDeleted();
+            
+            replyToDto = MessageResponseDto.ReplyToDto.builder()
+                    .messageId(replyTo.getMessageId())
+                    .senderId(replyTo.getSenderId())
+                    .senderName(replyTo.getSenderName())
+                    .messageType(replyTo.getMessageType())
+                    .previewText(isDeleted ? null : replyTo.getPreviewText())
+                    .deleted(isDeleted)
+                    .build();
+        }
+        
         return MessageResponseDto.builder()
                 .messageId(message.getMessageId())
                 .roomCode(message.getRoomCode())
@@ -203,6 +258,7 @@ public class MessageService {
                 .edited(message.isEdited())
                 .deleted(message.isDeleted())
                 .lastModified(message.getLastModified())
+                .replyTo(replyToDto)
                 .build();
     }
     

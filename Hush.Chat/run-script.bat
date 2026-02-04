@@ -63,7 +63,7 @@ REM Compile the project
 echo [4/5] Compiling project with Maven...
 echo This may take a few minutes...
 echo.
-call mvn clean package -DskipTests
+call .\mvnw.cmd clean package -DskipTests
 if errorlevel 1 (
     echo.
     echo [ERROR] Maven build failed!
@@ -90,7 +90,7 @@ echo   - Health: http://localhost:8080/actuator/health
 echo   - Dev Tools: http://localhost:8080/api/dev/redis/status
 echo.
 
-call mvn spring-boot:run
+call .\mvnw.cmd spring-boot:run
 
 REM This part runs after you stop the application with Ctrl+C
 echo.
