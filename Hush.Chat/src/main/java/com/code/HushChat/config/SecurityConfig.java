@@ -87,8 +87,13 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/login").permitAll()
                 .requestMatchers("/api/rooms/create").permitAll()
                 .requestMatchers("/api/rooms/join").permitAll()
+                .requestMatchers("/api/rooms/leave").permitAll()   // Leave room
+                .requestMatchers("/api/rooms/*/info").permitAll()  // Room info
+                .requestMatchers("/api/messages/**").permitAll()   // All message endpoints
+                .requestMatchers("/api/files/**").permitAll()      // File upload/download
                 .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/ws/**").permitAll()
+                .requestMatchers("/api/dev/**").permitAll()        // Development endpoints
                 
                 // All other /api/** endpoints require authentication
                 .requestMatchers("/api/**").authenticated()

@@ -28,6 +28,9 @@
 	</scm>
 	<properties>
 		<java.version>17</java.version>
+		<!-- Reduce Maven logging noise -->
+		<maven.compiler.showWarnings>false</maven.compiler.showWarnings>
+		<maven.compiler.showDeprecation>false</maven.compiler.showDeprecation>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -106,6 +109,19 @@
 			<groupId>com.mysql</groupId>
 			<artifactId>mysql-connector-j</artifactId>
 			<scope>runtime</scope>
+		</dependency>
+
+		<!-- Spring Data Redis -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+
+		<!-- Lettuce (Redis client) - included with spring-boot-starter-data-redis -->
+		<!-- Connection pooling for Redis -->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-pool2</artifactId>
 		</dependency>
 
 		<!-- Spring Boot Test -->
