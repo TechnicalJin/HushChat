@@ -15,9 +15,14 @@ import lombok.extern.slf4j.Slf4j;
  * 2. New code to use RealtimeEvent
  * 3. Gradual migration without breaking existing functionality
  * 
+ * Can be used as:
+ * - Static utility: EventConverter.toPollEventDto(event)
+ * - Spring bean: Injected for instance methods (toDto)
+ * 
  * @since 1.0.0
  */
 @Slf4j
+@org.springframework.stereotype.Component
 public class EventConverter {
     
     /**
@@ -68,6 +73,22 @@ public class EventConverter {
                 // Payload mapping would be done here based on event type
                 // For now, we preserve backward compatibility
                 .build();
+    }
+    
+    /**
+     * Convert RealtimeEvent to DTO format for transport layer.
+     * This is an instance method alias for toPollEventDto to support both
+     * static and instance usage patterns.
+     * 
+     * Used by:
+     * - WebSocketDispatcher (instance method)
+     * - LongPollDispatcher (static method)
+     * 
+     * @param realtimeEvent Unified RealtimeEvent
+     * @return DTO object suitable for serialization (PollEventDto)
+     */
+    public Object toDto(RealtimeEvent realtimeEvent) {
+        return toPollEventDto(realtimeEvent);
     }
     
     /**

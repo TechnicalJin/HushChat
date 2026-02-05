@@ -1,101 +1,157 @@
 package com.code.HushChat.realtime;
 
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 
 /**
- * WebSocket configuration for STOMP messaging.
+ * WebSocket configuration for STOMP messaging over WebSocket.
  * 
- * STUB - To be implemented in future phase.
+ * Architecture:
+ * - Endpoint: /ws (with SockJS fallback)
+ * - Message broker: /topic (broadcast), /queue (point-to-point)
+ * - Application prefix: /app (client -> server messages)
+ * - User prefix: /user (targeted user messages)
  * 
- * Configuration will implement WebSocketMessageBrokerConfigurer.
+ * Message flow examples:
+ * 1. Client sends message:
+ *    - Client: SEND /app/message/ABC123 {content}
+ *    - Server: Broadcasts to /topic/room/ABC123
  * 
- * Responsibilities:
- * - Register WebSocket endpoint (e.g., /ws)
- * - Configure STOMP message broker
- * - Set allowed origins for CORS
- * - Wire authentication interceptor
- * - Configure message size limits
+ * 2. Client receives room events:
+ *    - Client: SUBSCRIBE /topic/room/ABC123
+ *    - Server: Sends events to all subscribers
  * 
- * Endpoint structure:
- * - WebSocket endpoint: ws://host/ws
- * - SockJS fallback: http://host/ws (for older browsers)
- * - STOMP protocol over WebSocket
+ * 3. Targeted user message:
+ *    - Server: Sends to /user/{userId}/queue/notification
+ *    - Client: SUBSCRIBE /user/queue/notification
  * 
- * Message broker destinations:
- * - /topic/room/{roomCode} - Broadcast to all users in room
- * - /queue/user/{userId} - Private messages to specific user
- * - /app/* - Application destination prefix (client -> server)
- * 
- * Client subscription patterns:
- * - Subscribe: /topic/room/ABC123 (receive room events)
- * - Send: /app/message/ABC123 (send message to room)
- * 
- * Dependencies required (add to pom.xml when implementing):
- * <dependency>
- *     <groupId>org.springframework.boot</groupId>
- *     <artifactId>spring-boot-starter-websocket</artifactId>
- * </dependency>
+ * Security:
+ * - JWT authentication via WebSocketAuthInterceptor
+ * - CORS configured for allowed origins
+ * - Message size limits enforced
  * 
  * @since 1.0.0
  */
 @Configuration
-public class WebSocketConfig {
+@EnableWebSocketMessageBroker
+@RequiredArgsConstructor
+@Slf4j
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     
-    // TODO: Inject dependencies
-    // private final WebSocketAuthInterceptor authInterceptor;
+    private final WebSocketAuthInterceptor authInterceptor;
+    
+    /**
+     * WebSocket endpoint path.
+     */
+    private static final String WEBSOCKET_ENDPOINT = "/ws";
+    
+    /**
+     * Allowed origins for CORS.
+     * TODO: Update for production with actual domain
+     */
+    private static final String[] ALLOWED_ORIGINS = {
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        // Add production URLs here
+    };
     
     /**
      * Register STOMP endpoints for WebSocket communication.
      * 
-     * Example implementation:
-     * <pre>
-     * public void registerStompEndpoints(StompEndpointRegistry registry) {
-     *     registry.addEndpoint("/ws")
-     *         .setAllowedOrigins("http://localhost:8080", "https://yourapp.com")
-     *         .addInterceptors(authInterceptor)
-     *         .withSockJS();
-     * }
-     * </pre>
+     * Endpoint configuration:
+     * - Base endpoint: /ws
+     * - Authentication: JWT token in query parameter
+     * - CORS: Configured for allowed origins
+     * - SockJS fallback: Enabled for older browsers
+     * 
+     * Client connection example:
+     * - WebSocket: ws://host/ws?token={jwt}
+     * - SockJS: http://host/ws?token={jwt}
+     * 
+     * @param registry STOMP endpoint registry
      */
-    public void registerStompEndpoints(/* StompEndpointRegistry registry */) {
-        // TODO: Implementation steps:
-        // 1. Add endpoint: registry.addEndpoint("/ws")
-        // 2. Set allowed origins (CORS): .setAllowedOrigins(...)
-        // 3. Add auth interceptor: .addInterceptors(authInterceptor)
-        // 4. Enable SockJS fallback: .withSockJS()
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        log.info("Registering WebSocket STOMP endpoint: {}", WEBSOCKET_ENDPOINT);
+        
+        registry.addEndpoint(WEBSOCKET_ENDPOINT)
+                // Configure CORS - only allow explicitly configured origins
+                .setAllowedOrigins(ALLOWED_ORIGINS)
+                // Add JWT authentication interceptor
+                .addInterceptors(authInterceptor)
+                // Enable SockJS fallback for browsers without WebSocket support
+                .withSockJS()
+                    // Optional: Configure SockJS options
+                    .setHeartbeatTime(25000) // 25 seconds
+                    .setDisconnectDelay(5000); // 5 seconds
+        
+        log.info("WebSocket endpoint registered with SockJS fallback and JWT authentication");
     }
     
     /**
-     * Configure message broker for routing.
+     * Configure message broker for routing STOMP messages.
      * 
-     * Example implementation:
-     * <pre>
-     * public void configureMessageBroker(MessageBrokerRegistry registry) {
-     *     registry.enableSimpleBroker("/topic", "/queue");
-     *     registry.setApplicationDestinationPrefixes("/app");
-     *     registry.setUserDestinationPrefix("/user");
-     * }
-     * </pre>
+     * Broker configuration:
+     * - /topic: Broadcast messages (one-to-many)
+     * - /queue: Point-to-point messages (one-to-one)
+     * - /app: Application destination prefix (client -> server)
+     * - /user: User-specific destination prefix
+     * 
+     * Destination patterns:
+     * - /topic/room/{roomCode}: Broadcast to all users in room
+     * - /user/{userId}/queue/notification: Private message to user
+     * - /app/message/{roomCode}: Client sends message to server
+     * 
+     * @param registry Message broker registry
      */
-    public void configureMessageBroker(/* MessageBrokerRegistry registry */) {
-        // TODO: Implementation steps:
-        // 1. Enable simple broker: registry.enableSimpleBroker("/topic", "/queue")
-        // 2. Set app prefix: registry.setApplicationDestinationPrefixes("/app")
-        // 3. Set user prefix: registry.setUserDestinationPrefix("/user")
-        // 4. Configure message size limits if needed
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry registry) {
+        log.info("Configuring STOMP message broker");
+        
+        // Enable simple in-memory broker for /topic and /queue destinations
+        registry.enableSimpleBroker("/topic", "/queue")
+                // Optional: Configure task scheduler for heartbeats
+                .setHeartbeatValue(new long[]{10000, 10000}); // 10 seconds
+        
+        // Set application destination prefix for client -> server messages
+        registry.setApplicationDestinationPrefixes("/app");
+        
+        // Set user destination prefix for targeted user messages
+        registry.setUserDestinationPrefix("/user");
+        
+        log.info("Message broker configured: /topic, /queue, /app, /user");
     }
     
     /**
-     * Configure connection handling (optional).
+     * Configure WebSocket transport options.
      * 
-     * Use for:
-     * - Registering/unregistering sessions on connect/disconnect
-     * - Tracking active users per room
+     * Transport settings:
+     * - Message size limits
+     * - Send buffer size
+     * - Send time limits
+     * 
+     * @param registry WebSocket transport registry
      */
-    public void configureWebSocketTransport(/* WebSocketTransportRegistration registry */) {
-        // TODO: Configure message sizes, timeouts, etc.
-        // registry.setMessageSizeLimit(64 * 1024); // 64KB
-        // registry.setSendBufferSizeLimit(512 * 1024); // 512KB
-        // registry.setSendTimeLimit(20 * 1000); // 20 seconds
+    @Override
+    public void configureWebSocketTransport(WebSocketTransportRegistration registry) {
+        log.info("Configuring WebSocket transport settings");
+        
+        registry
+            // Maximum message size: 128 KB (should handle most messages)
+            .setMessageSizeLimit(128 * 1024)
+            
+            // Send buffer size: 512 KB
+            .setSendBufferSizeLimit(512 * 1024)
+            
+            // Send timeout: 20 seconds
+            .setSendTimeLimit(20 * 1000);
+        
+        log.info("WebSocket transport configured: messageSize=128KB, bufferSize=512KB, timeout=20s");
     }
 }
