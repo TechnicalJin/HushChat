@@ -8,6 +8,9 @@ import com.code.HushChat.exception.RoomNotFoundException;
 import com.code.HushChat.exception.UnauthorizedException;
 import com.code.HushChat.model.ChatMessage;
 import com.code.HushChat.model.ChatRoom;
+import com.code.HushChat.model.event.BaseRealtimeEvent;
+import com.code.HushChat.model.event.RealtimeEvent;
+import com.code.HushChat.realtime.RealtimeDispatcher;
 import com.code.HushChat.storage.InMemoryMessageStore;
 import com.code.HushChat.storage.InMemoryRoomStore;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +35,11 @@ public class MessageService {
     private final InMemoryRoomStore roomStore;
     private final RoomService roomService;
     private final AppConfig appConfig;
+    
+    // LongPollManager used ONLY for poll registration (pollEvents method)
+    // Event NOTIFICATION uses RealtimeDispatcher (transport-agnostic)
     private final LongPollManager longPollManager;
+    private final RealtimeDispatcher realtimeDispatcher;
     
     // Maximum preview text length for replies
     private static final int MAX_PREVIEW_LENGTH = 100;
@@ -126,8 +133,9 @@ public class MessageService {
      */
     private void notifyPendingPollsNewMessage(String roomCode, MessageResponseDto message) {
         try {
-            PollEventDto messageEvent = PollEventDto.messageEvent(roomCode, message);
-            longPollManager.notifyRoom(roomCode, messageEvent);
+            RealtimeEvent event = BaseRealtimeEvent.messageEvent(roomCode, 
+                PollEventDto.messageEvent(roomCode, message));
+            realtimeDispatcher.dispatch(event, null);
             log.debug("Notified pending polls for room {} about new message", roomCode);
         } catch (Exception e) {
             log.error("Failed to notify pending polls for new message: {}", e.getMessage(), e);
@@ -371,8 +379,11 @@ public class MessageService {
      */
     private void notifyPendingPollsMessageEdit(String roomCode, MessageResponseDto message) {
         try {
-            PollEventDto editEvent = PollEventDto.messageEditEvent(roomCode, message);
-            longPollManager.notifyRoom(roomCode, editEvent);
+            RealtimeEvent event = BaseRealtimeEvent.customEvent(
+                com.code.HushChat.model.event.EventType.MESSAGE_EDIT,
+                roomCode,
+                PollEventDto.messageEditEvent(roomCode, message));
+            realtimeDispatcher.dispatch(event, null);
             log.debug("Notified pending polls for room {} about message edit", roomCode);
         } catch (Exception e) {
             log.error("Failed to notify pending polls for message edit: {}", e.getMessage(), e);
@@ -430,8 +441,11 @@ public class MessageService {
      */
     private void notifyPendingPollsMessageDelete(String roomCode, MessageResponseDto message) {
         try {
-            PollEventDto deleteEvent = PollEventDto.messageDeleteEvent(roomCode, message);
-            longPollManager.notifyRoom(roomCode, deleteEvent);
+            RealtimeEvent event = BaseRealtimeEvent.customEvent(
+                com.code.HushChat.model.event.EventType.MESSAGE_DELETE,
+                roomCode,
+                PollEventDto.messageDeleteEvent(roomCode, message));
+            realtimeDispatcher.dispatch(event, null);
             log.debug("Notified pending polls for room {} about message delete", roomCode);
         } catch (Exception e) {
             log.error("Failed to notify pending polls for message delete: {}", e.getMessage(), e);

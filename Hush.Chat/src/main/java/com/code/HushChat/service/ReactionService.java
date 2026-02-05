@@ -8,6 +8,9 @@ import com.code.HushChat.exception.RoomNotFoundException;
 import com.code.HushChat.exception.UnauthorizedException;
 import com.code.HushChat.model.ChatRoom;
 import com.code.HushChat.model.MessageReaction;
+import com.code.HushChat.model.event.BaseRealtimeEvent;
+import com.code.HushChat.model.event.RealtimeEvent;
+import com.code.HushChat.realtime.RealtimeDispatcher;
 import com.code.HushChat.storage.InMemoryReactionStore;
 import com.code.HushChat.storage.InMemoryRoomStore;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +23,7 @@ import java.util.stream.Collectors;
 
 /**
  * Service for managing message reactions (emoji reactions).
- * Notifies all pending long-poll requests when reactions change.
+ * Uses RealtimeDispatcher for transport-agnostic event delivery.
  */
 @Service
 @RequiredArgsConstructor
@@ -29,7 +32,7 @@ public class ReactionService {
     
     private final InMemoryReactionStore reactionStore;
     private final InMemoryRoomStore roomStore;
-    private final LongPollManager longPollManager;
+    private final RealtimeDispatcher realtimeDispatcher;
     
     // Default quick reaction emojis (matching Instagram/WhatsApp)
     public static final List<String> DEFAULT_REACTIONS = List.of("❤️", "😂", "😮", "😢", "😡", "👍");
@@ -108,9 +111,9 @@ public class ReactionService {
                     updatedCounts
             );
             
-            // Notify ALL pending polls for this room (including the user who triggered it)
-            // This ensures everyone sees the update
-            longPollManager.notifyRoom(roomCode, reactionEvent);
+            // Wrap in RealtimeEvent and dispatch
+            RealtimeEvent event = BaseRealtimeEvent.reactionEvent(roomCode, reactionEvent);
+            realtimeDispatcher.dispatch(event, null);
             
             log.debug("Notified pending polls for room {} about reaction {} by {}", 
                      roomCode, emoji, userId);
