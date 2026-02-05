@@ -4,42 +4,36 @@ import com.code.HushChat.model.event.RealtimeEvent;
 import com.code.HushChat.util.EventConverter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.lang.Nullable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
 
+// NOTE: Long polling support intentionally removed.
+// This is now the ONLY realtime dispatcher - WebSocket-only transport.
+
 /**
  * WebSocket implementation of RealtimeDispatcher.
- * Active when realtime.mode=WEBSOCKET.
+ * This is the SINGLE dispatcher for all real-time event delivery.
  * 
  * Delivers real-time events to connected WebSocket clients using STOMP protocol.
  * 
  * Delivery strategies:
  * 1. Room broadcast: Send to all users in room (except excludeUserId)
  * 2. Targeted delivery: Send to specific users via /user destination
- * 3. Fallback: Silently fail if delivery fails (clients use polling)
  * 
  * Message destinations:
  * - /topic/room/{roomCode}: Broadcast to all room subscribers
- * - /user/{userId}/queue/events: Targeted user messages (future)
+ * - /user/{userId}/queue/events: Targeted user messages
  * 
- * Safety guarantees (Phase 5):
+ * Safety guarantees:
  * - dispatch() NEVER throws exceptions
  * - All errors caught and logged
- * - WebSocket failures DON'T break Long Polling path
- * - Clients automatically fall back to polling on failure
  * 
- * @since 1.0.0
+ * @since 2.0.0 (WebSocket-only version)
  */
 @Component
-@ConditionalOnProperty(
-    prefix = "realtime",
-    name = "mode",
-    havingValue = "WEBSOCKET"
-)
 @RequiredArgsConstructor
 @Slf4j
 public class WebSocketDispatcher implements RealtimeDispatcher {
@@ -59,14 +53,12 @@ public class WebSocketDispatcher implements RealtimeDispatcher {
      * Flow:
      * 1. Get active WebSocket users in room from session registry
      * 2. Filter out excludeUserId if provided
-     * 3. Convert RealtimeEvent to PollEventDto (unified format)
+     * 3. Convert RealtimeEvent to WebSocketEventDto
      * 4. Send to /topic/room/{roomCode} for broadcast
      * 5. Log success/failure
      * 
-     * CRITICAL SAFETY:
+     * SAFETY:
      * - Never throws exceptions (all errors caught and logged)
-     * - WebSocket failures don't affect Long Polling
-     * - Clients receive events via polling if WebSocket fails
      * 
      * @param event The real-time event to dispatch
      * @param excludeUserId Optional user ID to exclude from notification (typically the sender)
@@ -90,8 +82,8 @@ public class WebSocketDispatcher implements RealtimeDispatcher {
             Set<String> connectedUsers = sessionRegistry.getUserIdsInRoom(roomCode);
             
             if (connectedUsers.isEmpty()) {
-                // No WebSocket users in room - this is normal (they'll use polling)
-                log.debug("No WebSocket users in room {} - event will be delivered via polling", roomCode);
+                // No WebSocket users in room - event will not be delivered
+                log.debug("No WebSocket users in room {} - event not delivered", roomCode);
                 return;
             }
             
@@ -107,7 +99,7 @@ public class WebSocketDispatcher implements RealtimeDispatcher {
                 return;
             }
             
-            // Convert to DTO format (same as Long Polling)
+            // Convert to WebSocketEventDto format
             Object payload = eventConverter.toDto(event);
             
             // Build destination
@@ -115,11 +107,16 @@ public class WebSocketDispatcher implements RealtimeDispatcher {
             
             // Send to each recipient individually to enforce excludeUserId filtering
             // This prevents the sender from receiving their own events via WebSocket
+            // Uses convertAndSendToUser which requires StompPrincipal to be set correctly
             int sentCount = 0;
             for (String userId : recipients) {
                 try {
+                    // CRITICAL: This requires CustomHandshakeHandler to set StompPrincipal(userId)
+                    // Spring STOMP will route to sessions where Principal.getName() == userId
                     messagingTemplate.convertAndSendToUser(userId, "/queue/room/" + roomCode, payload);
                     sentCount++;
+                    log.debug("WebSocket message sent to userId={} at /user/{}/queue/room/{}", 
+                              userId, userId, roomCode);
                 } catch (Exception e) {
                     log.warn("Failed to send WebSocket event to user {}: {}", userId, e.getMessage());
                     // Continue sending to other users
@@ -134,9 +131,8 @@ public class WebSocketDispatcher implements RealtimeDispatcher {
                      event.getEventType(), roomCode, sentCount, recipients.size(), destination);
             
         } catch (Exception e) {
-            // CRITICAL SAFETY: Isolate WebSocket failures from Long Polling
-            // Clients will automatically fall back to polling if WebSocket fails
-            log.error("WebSocket dispatch failed for event {} in room {} (clients will receive via polling): {}", 
+            // Log error - WebSocket dispatch failed
+            log.error("WebSocket dispatch failed for event {} in room {}: {}", 
                      event.getEventType(), 
                      event.getRoomCode(), 
                      e.getMessage());
@@ -144,7 +140,7 @@ public class WebSocketDispatcher implements RealtimeDispatcher {
             // Log full stack trace at debug level for troubleshooting
             log.debug("WebSocket dispatch exception details:", e);
             
-            // DO NOT RETHROW - Long Polling must continue to work
+            // DO NOT RETHROW - gracefully handle failures
         }
     }
     

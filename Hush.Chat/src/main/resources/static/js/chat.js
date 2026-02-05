@@ -1210,13 +1210,9 @@ const chat = {
         }
         this.unreadCount = 0;
         
-        // Stop polling safely
-        if (typeof polling !== 'undefined' && polling && typeof polling.stopPolling === 'function') {
-            try {
-                polling.stopPolling();
-            } catch (e) {
-                // Silently ignore polling stop errors
-            }
+        // Stop WebSocket transport
+        if (typeof transportFactory !== 'undefined') {
+            transportFactory.cleanup();
         }
         
         // Show modal or alert
@@ -1715,14 +1711,15 @@ const chat = {
         }
         
         // Add cancel button if not exists
-        if (!document.querySelector('.btn-cancel-edit')) {
+        if (!document.querySelector('.btn-cancel-edit') && sendBtn) {
             const cancelBtn = document.createElement('button');
             cancelBtn.type = 'button';
             cancelBtn.className = 'btn-cancel-edit';
             cancelBtn.innerHTML = '✕';
             cancelBtn.title = 'Cancel edit';
             cancelBtn.addEventListener('click', () => this.cancelEdit());
-            this.messageForm.insertBefore(cancelBtn, sendBtn);
+            // Insert before sendBtn in its parent container (message-input-row)
+            sendBtn.parentNode.insertBefore(cancelBtn, sendBtn);
         }
         
         // Highlight the message being edited
@@ -1870,6 +1867,28 @@ const chat = {
         }
         
         return false;
+    },
+    
+    /**
+     * Public method for updating a message (called by eventProcessor)
+     * Wrapper around updateExistingMessage for API compatibility
+     */
+    updateMessage(message) {
+        return this.updateExistingMessage(message);
+    },
+    
+    /**
+     * Handle deleted message event (called by eventProcessor)
+     */
+    handleMessageDeleted(messageId) {
+        const messageDiv = this.messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+        if (!messageDiv) return;
+        
+        messageDiv.classList.add('message-unsending');
+        setTimeout(() => {
+            messageDiv.remove();
+            this.displayedMessageIds.delete(messageId);
+        }, 300);
     },
     
     /**

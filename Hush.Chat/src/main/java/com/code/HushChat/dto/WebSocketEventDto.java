@@ -10,20 +10,24 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Unified event DTO for long-polling responses.
- * Supports both message events and reaction events.
+ * WebSocket event DTO for real-time message delivery.
+ * This is the ONLY event format used for WebSocket communication.
+ * 
+ * NOTE: Long polling was intentionally removed in favor of WebSocket-only transport.
  * 
  * Event types:
  * - MESSAGE: New message sent
  * - MESSAGE_EDIT: Message was edited
  * - MESSAGE_DELETE: Message was deleted/unsent
  * - REACTION: Reaction added or removed
+ * 
+ * @since 2.0.0 (WebSocket-only version)
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class PollEventDto {
+public class WebSocketEventDto {
     
     /**
      * Event type discriminator
@@ -108,8 +112,8 @@ public class PollEventDto {
     /**
      * Create a MESSAGE event
      */
-    public static PollEventDto messageEvent(String roomCode, MessageResponseDto message) {
-        return PollEventDto.builder()
+    public static WebSocketEventDto messageEvent(String roomCode, MessageResponseDto message) {
+        return WebSocketEventDto.builder()
                 .type(EventType.MESSAGE)
                 .roomCode(roomCode)
                 .timestamp(message.getTimestamp())
@@ -120,8 +124,8 @@ public class PollEventDto {
     /**
      * Create a MESSAGE_EDIT event
      */
-    public static PollEventDto messageEditEvent(String roomCode, MessageResponseDto message) {
-        return PollEventDto.builder()
+    public static WebSocketEventDto messageEditEvent(String roomCode, MessageResponseDto message) {
+        return WebSocketEventDto.builder()
                 .type(EventType.MESSAGE_EDIT)
                 .roomCode(roomCode)
                 .timestamp(message.getLastModified() != null ? message.getLastModified() : LocalDateTime.now())
@@ -132,8 +136,8 @@ public class PollEventDto {
     /**
      * Create a MESSAGE_DELETE event
      */
-    public static PollEventDto messageDeleteEvent(String roomCode, MessageResponseDto message) {
-        return PollEventDto.builder()
+    public static WebSocketEventDto messageDeleteEvent(String roomCode, MessageResponseDto message) {
+        return WebSocketEventDto.builder()
                 .type(EventType.MESSAGE_DELETE)
                 .roomCode(roomCode)
                 .timestamp(message.getLastModified() != null ? message.getLastModified() : LocalDateTime.now())
@@ -144,16 +148,10 @@ public class PollEventDto {
     /**
      * Create a REACTION event
      */
-    public static PollEventDto reactionEvent(
-            String roomCode, 
-            String messageId,
-            String emoji,
-            String reactedByUserId,
-            String reactedByUserName,
-            String action,
-            Map<String, ReactionInfo> updatedReactionCounts) {
-        
-        return PollEventDto.builder()
+    public static WebSocketEventDto reactionEvent(String roomCode, String messageId, String emoji,
+                                                   String reactedByUserId, String reactedByUserName,
+                                                   String action, Map<String, ReactionInfo> updatedCounts) {
+        return WebSocketEventDto.builder()
                 .type(EventType.REACTION)
                 .roomCode(roomCode)
                 .timestamp(LocalDateTime.now())
@@ -162,7 +160,7 @@ public class PollEventDto {
                 .reactedByUserId(reactedByUserId)
                 .reactedByUserName(reactedByUserName)
                 .action(action)
-                .updatedReactionCounts(updatedReactionCounts)
+                .updatedReactionCounts(updatedCounts)
                 .build();
     }
 }

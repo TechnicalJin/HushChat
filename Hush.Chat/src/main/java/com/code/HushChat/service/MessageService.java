@@ -2,7 +2,7 @@ package com.code.HushChat.service;
 
 import com.code.HushChat.config.AppConfig;
 import com.code.HushChat.dto.MessageResponseDto;
-import com.code.HushChat.dto.PollEventDto;
+import com.code.HushChat.dto.WebSocketEventDto;
 import com.code.HushChat.dto.SendMessageDto;
 import com.code.HushChat.exception.RoomNotFoundException;
 import com.code.HushChat.exception.UnauthorizedException;
@@ -18,13 +18,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+// NOTE: Long polling (LongPollManager, PollEventDto) intentionally removed.
+// All real-time communication now uses WebSocket-only transport.
 
 @Service
 @RequiredArgsConstructor
@@ -35,10 +35,6 @@ public class MessageService {
     private final InMemoryRoomStore roomStore;
     private final RoomService roomService;
     private final AppConfig appConfig;
-    
-    // LongPollManager used ONLY for poll registration (pollEvents method)
-    // Event NOTIFICATION uses RealtimeDispatcher (transport-agnostic)
-    private final LongPollManager longPollManager;
     private final RealtimeDispatcher realtimeDispatcher;
     
     // Maximum preview text length for replies
@@ -122,23 +118,23 @@ public class MessageService {
         // Create response DTO
         MessageResponseDto responseDto = toMessageResponseDto(message, senderName);
         
-        // Notify all pending long-poll requests for this room about the new message
-        notifyPendingPollsNewMessage(roomCode, responseDto);
+        // Dispatch new message event via WebSocket to all room members
+        dispatchMessageEvent(roomCode, responseDto);
         
         return responseDto;
     }
     
     /**
-     * Notify all pending long-poll requests about a new message.
+     * Dispatch new message event via WebSocket.
      */
-    private void notifyPendingPollsNewMessage(String roomCode, MessageResponseDto message) {
+    private void dispatchMessageEvent(String roomCode, MessageResponseDto message) {
         try {
             RealtimeEvent event = BaseRealtimeEvent.messageEvent(roomCode, 
-                PollEventDto.messageEvent(roomCode, message));
+                WebSocketEventDto.messageEvent(roomCode, message));
             realtimeDispatcher.dispatch(event, null);
-            log.debug("Notified pending polls for room {} about new message", roomCode);
+            log.debug("Dispatched new message event for room {} via WebSocket", roomCode);
         } catch (Exception e) {
-            log.error("Failed to notify pending polls for new message: {}", e.getMessage(), e);
+            log.error("Failed to dispatch new message event: {}", e.getMessage(), e);
         }
     }
     
@@ -203,68 +199,8 @@ public class MessageService {
                 .collect(Collectors.toList());
     }
     
-    /**
-     * Long polling - wait for new messages OR reaction events.
-     * Uses event-driven approach via LongPollManager for immediate notification.
-     * 
-     * @return List of poll events (messages and reactions)
-     */
-    public List<PollEventDto> pollEvents(String roomCode, LocalDateTime sinceTimestamp, 
-                                          String userId, int timeoutSeconds) throws InterruptedException {
-        // Validate room exists and user is a member
-        ChatRoom room = roomStore.get(roomCode);
-        if (room == null || room.isExpired()) {
-            throw new RoomNotFoundException("Room not found or expired: " + roomCode);
-        }
-        if (!room.getActiveUserIds().contains(userId)) {
-            throw new UnauthorizedException("User is not a member of this room");
-        }
-        
-        // First, check if there are already new messages available
-        List<MessageResponseDto> existingMessages = getMessagesSince(roomCode, sinceTimestamp, userId);
-        if (!existingMessages.isEmpty()) {
-            // Convert to poll events and return immediately
-            return existingMessages.stream()
-                    .map(msg -> PollEventDto.messageEvent(roomCode, msg))
-                    .collect(Collectors.toList());
-        }
-        
-        // No existing messages, register for long-poll notification
-        LongPollManager.PendingPoll pendingPoll = longPollManager.registerPoll(roomCode, userId, timeoutSeconds);
-        
-        try {
-            // Wait for events or timeout
-            CompletableFuture<List<PollEventDto>> future = pendingPoll.getFuture();
-            List<PollEventDto> events = future.get(timeoutSeconds, TimeUnit.SECONDS);
-            
-            return events != null ? events : Collections.emptyList();
-        } catch (java.util.concurrent.TimeoutException e) {
-            // Timeout - return empty list
-            return Collections.emptyList();
-        } catch (java.util.concurrent.ExecutionException e) {
-            log.error("Poll execution error: {}", e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-    
-    /**
-     * Legacy long polling - wait for new messages only (for backward compatibility)
-     * @deprecated Use pollEvents() instead for unified message + reaction updates
-     */
-    @Deprecated
-    public List<MessageResponseDto> pollMessages(String roomCode, LocalDateTime sinceTimestamp, 
-                                                  String userId, int timeoutSeconds) throws InterruptedException {
-        // Use the new event-based polling and extract only messages
-        List<PollEventDto> events = pollEvents(roomCode, sinceTimestamp, userId, timeoutSeconds);
-        
-        return events.stream()
-                .filter(e -> e.getType() == PollEventDto.EventType.MESSAGE || 
-                            e.getType() == PollEventDto.EventType.MESSAGE_EDIT ||
-                            e.getType() == PollEventDto.EventType.MESSAGE_DELETE)
-                .map(PollEventDto::getMessage)
-                .filter(msg -> msg != null)
-                .collect(Collectors.toList());
-    }
+    // NOTE: pollEvents() and pollMessages() methods intentionally removed.
+    // All real-time events are now delivered via WebSocket only.
     
     /**
      * Cleanup expired messages - called by scheduled task
@@ -368,25 +304,25 @@ public class MessageService {
         
         MessageResponseDto responseDto = toMessageResponseDto(updatedMessage, senderName != null ? senderName : "Unknown");
         
-        // Notify all pending polls about the edit
-        notifyPendingPollsMessageEdit(roomCode, responseDto);
+        // Dispatch edit event via WebSocket to all room members
+        dispatchMessageEditEvent(roomCode, responseDto);
         
         return responseDto;
     }
     
     /**
-     * Notify all pending long-poll requests about a message edit.
+     * Dispatch message edit event via WebSocket.
      */
-    private void notifyPendingPollsMessageEdit(String roomCode, MessageResponseDto message) {
+    private void dispatchMessageEditEvent(String roomCode, MessageResponseDto message) {
         try {
             RealtimeEvent event = BaseRealtimeEvent.customEvent(
                 com.code.HushChat.model.event.EventType.MESSAGE_EDIT,
                 roomCode,
-                PollEventDto.messageEditEvent(roomCode, message));
+                WebSocketEventDto.messageEditEvent(roomCode, message));
             realtimeDispatcher.dispatch(event, null);
-            log.debug("Notified pending polls for room {} about message edit", roomCode);
+            log.debug("Dispatched message edit event for room {} via WebSocket", roomCode);
         } catch (Exception e) {
-            log.error("Failed to notify pending polls for message edit: {}", e.getMessage(), e);
+            log.error("Failed to dispatch message edit event: {}", e.getMessage(), e);
         }
     }
     
@@ -430,25 +366,25 @@ public class MessageService {
         
         MessageResponseDto responseDto = toMessageResponseDto(deletedMessage, senderName != null ? senderName : "Unknown");
         
-        // Notify all pending polls about the deletion
-        notifyPendingPollsMessageDelete(roomCode, responseDto);
+        // Dispatch delete event via WebSocket to all room members
+        dispatchMessageDeleteEvent(roomCode, responseDto);
         
         return responseDto;
     }
     
     /**
-     * Notify all pending long-poll requests about a message deletion.
+     * Dispatch message delete event via WebSocket.
      */
-    private void notifyPendingPollsMessageDelete(String roomCode, MessageResponseDto message) {
+    private void dispatchMessageDeleteEvent(String roomCode, MessageResponseDto message) {
         try {
             RealtimeEvent event = BaseRealtimeEvent.customEvent(
                 com.code.HushChat.model.event.EventType.MESSAGE_DELETE,
                 roomCode,
-                PollEventDto.messageDeleteEvent(roomCode, message));
+                WebSocketEventDto.messageDeleteEvent(roomCode, message));
             realtimeDispatcher.dispatch(event, null);
-            log.debug("Notified pending polls for room {} about message delete", roomCode);
+            log.debug("Dispatched message delete event for room {} via WebSocket", roomCode);
         } catch (Exception e) {
-            log.error("Failed to notify pending polls for message delete: {}", e.getMessage(), e);
+            log.error("Failed to dispatch message delete event: {}", e.getMessage(), e);
         }
     }
 }

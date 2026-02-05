@@ -26,6 +26,9 @@ document.getElementById('createRoomForm').addEventListener('submit', async (e) =
             localStorage.setItem('userId', data.userId);
             localStorage.setItem('userName', data.userName);
             localStorage.setItem('isCreator', 'true');
+            // CRITICAL: Store JWT token for WebSocket authentication
+            localStorage.setItem('sessionToken', data.token);
+            localStorage.setItem('token', data.token);  // Backup key
             
             // Show success with room code
             showSuccess(`Room created! Code: ${data.roomCode}`);
@@ -70,6 +73,9 @@ document.getElementById('joinRoomForm').addEventListener('submit', async (e) => 
             localStorage.setItem('userId', data.userId);
             localStorage.setItem('userName', data.userName);
             localStorage.setItem('isCreator', 'false');
+            // CRITICAL: Store JWT token for WebSocket authentication
+            localStorage.setItem('sessionToken', data.token);
+            localStorage.setItem('token', data.token);  // Backup key
             
             // Show success
             showSuccess(`Joined room: ${data.roomName}`);

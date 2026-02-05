@@ -1,11 +1,11 @@
 // API Configuration
+// NOTE: Long polling support intentionally removed. WebSocket is the ONLY real-time transport.
 const config = {
     // API Base URL - Update this for production
     API_BASE_URL: 'http://localhost:8080/api',
 
     // Timeouts
     REQUEST_TIMEOUT: 30000, // 30 seconds
-    LONG_POLL_TIMEOUT: 35000, // 35 seconds for long polling (server waits 20s + network buffer)
 
     // OTP Settings
     OTP_LENGTH: 6,
@@ -17,7 +17,6 @@ const config = {
 
     // Message Settings
     MESSAGE_TTL_MINUTES: 10,
-    POLL_INTERVAL_MS: 2000, // 2 seconds
 
     // Room Settings
     ROOM_CODE_LENGTH: 5,
@@ -34,6 +33,14 @@ const config = {
         USER_ID: 'userId',
         CURRENT_ROOM: 'currentRoom',
         LAST_MESSAGE_TIME: 'lastMessageTime'
+    },
+    
+    // WebSocket Configuration (WebSocket-only transport)
+    WEBSOCKET: {
+        ENABLED: true,                      // WebSocket is always enabled
+        ENDPOINT: '/ws',                    // WebSocket endpoint
+        RECONNECT_ATTEMPTS: 3,              // Max reconnection attempts
+        RECONNECT_DELAYS: [1000, 3000, 5000] // Backoff delays in ms
     }
 };
 

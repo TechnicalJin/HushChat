@@ -6,6 +6,7 @@ import com.code.HushChat.dto.LeaveRoomDto;
 import com.code.HushChat.dto.RoomInfoDto;
 import com.code.HushChat.model.ApiResponse;
 import com.code.HushChat.model.ChatRoom;
+import com.code.HushChat.security.JwtTokenProvider;
 import com.code.HushChat.service.RoomService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import java.util.Map;
 public class RoomController {
     
     private final RoomService roomService;
+    private final JwtTokenProvider jwtTokenProvider;
     
     /**
      * Create a new chat room
@@ -33,11 +35,15 @@ public class RoomController {
         
         ChatRoom room = roomService.createRoom(dto);
         
+        // Generate JWT token for WebSocket authentication
+        String token = jwtTokenProvider.generateToken(room.getCreatorId());
+        
         Map<String, Object> response = new HashMap<>();
         response.put("roomCode", room.getRoomCode());
         response.put("roomName", room.getRoomName());
         response.put("userId", room.getCreatorId());
         response.put("userName", dto.getUserName());
+        response.put("token", token);  // For WebSocket auth
         response.put("maxUsers", room.getMaxUsers());
         response.put("createdAt", room.getCreatedAt());
         
@@ -61,11 +67,15 @@ public class RoomController {
             .findFirst()
             .orElse(null);
         
+        // Generate JWT token for WebSocket authentication
+        String token = jwtTokenProvider.generateToken(userId);
+        
         Map<String, Object> response = new HashMap<>();
         response.put("roomCode", room.getRoomCode());
         response.put("roomName", room.getRoomName());
         response.put("userId", userId);
         response.put("userName", dto.getUserName());
+        response.put("token", token);  // For WebSocket auth
         response.put("currentUsers", room.getActiveUserIds().size());
         response.put("maxUsers", room.getMaxUsers());
         

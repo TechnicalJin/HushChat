@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -45,6 +46,7 @@ import org.springframework.web.socket.config.annotation.WebSocketTransportRegist
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     
     private final WebSocketAuthInterceptor authInterceptor;
+    private final CustomHandshakeHandler handshakeHandler;
     
     /**
      * WebSocket endpoint path.
@@ -85,13 +87,16 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setAllowedOrigins(ALLOWED_ORIGINS)
                 // Add JWT authentication interceptor
                 .addInterceptors(authInterceptor)
+                // CRITICAL FIX: Set custom handshake handler to create StompPrincipal
+                // This enables convertAndSendToUser() to route messages correctly
+                .setHandshakeHandler(handshakeHandler)
                 // Enable SockJS fallback for browsers without WebSocket support
                 .withSockJS()
                     // Optional: Configure SockJS options
                     .setHeartbeatTime(25000) // 25 seconds
                     .setDisconnectDelay(5000); // 5 seconds
         
-        log.info("WebSocket endpoint registered with SockJS fallback and JWT authentication");
+        log.info("WebSocket endpoint registered with SockJS fallback, JWT authentication, and custom handshake handler");
     }
     
     /**
@@ -114,9 +119,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         log.info("Configuring STOMP message broker");
         
+        // Create TaskScheduler for heartbeats
+        ThreadPoolTaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
+        taskScheduler.setPoolSize(1);
+        taskScheduler.setThreadNamePrefix("ws-heartbeat-");
+        taskScheduler.initialize();
+        
         // Enable simple in-memory broker for /topic and /queue destinations
         registry.enableSimpleBroker("/topic", "/queue")
-                // Optional: Configure task scheduler for heartbeats
+                .setTaskScheduler(taskScheduler)
                 .setHeartbeatValue(new long[]{10000, 10000}); // 10 seconds
         
         // Set application destination prefix for client -> server messages

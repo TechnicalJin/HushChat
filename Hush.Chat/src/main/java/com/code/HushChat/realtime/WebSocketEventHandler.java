@@ -48,7 +48,18 @@ public class WebSocketEventHandler {
      * Pattern to extract room code from subscription destination.
      * Expected format: /topic/room/{roomCode}
      */
-    private static final Pattern ROOM_DESTINATION_PATTERN = Pattern.compile("/topic/room/([A-Z0-9]+)");
+    /**
+     * Pattern to extract room code from subscription destination.
+     * Expected format: /topic/room/{roomCode}
+     */
+    private static final Pattern ROOM_TOPIC_PATTERN = Pattern.compile("/topic/room/([A-Z0-9]+)");
+
+    /**
+     * Pattern to extract room code from user queue subscription.
+     * Expected format: /user/queue/room/{roomCode} or /user/../queue/room/{roomCode}
+     * Matches: /user/queue/room/ABC, /queue/room/ABC, /user/{id}/queue/room/ABC
+     */
+    private static final Pattern ROOM_QUEUE_PATTERN = Pattern.compile(".*queue/room/([A-Z0-9]+)");
     
     /**
      * Session attribute key for userId (set by WebSocketAuthInterceptor).
@@ -80,7 +91,9 @@ public class WebSocketEventHandler {
      * This is where we register the session in the registry,
      * because now we know both userId and roomCode.
      * 
-     * Expected destination format: /topic/room/{roomCode}
+     * Expected destination format: 
+     * - /topic/room/{roomCode} (Broadcast)
+     * - /user/queue/room/{roomCode} (Targeted)
      * 
      * @param event Session subscribe event
      */
@@ -108,7 +121,7 @@ public class WebSocketEventHandler {
             // Register session in registry
             sessionRegistry.registerSession(sessionId, userId, roomCode);
             
-            log.info("User subscribed to room: sessionId={}, userId={}, roomCode={}, destination={}", 
+            log.info("User registered in room via WebSocket: sessionId={}, userId={}, roomCode={}, destination={}", 
                      sessionId, userId, roomCode, destination);
         } else {
             // Non-room subscription (e.g., user queue)
@@ -190,7 +203,10 @@ public class WebSocketEventHandler {
     /**
      * Extract room code from subscription destination.
      * 
-     * Expected format: /topic/room/{roomCode}
+     * Supports:
+     * - /topic/room/{roomCode}
+     * - /user/queue/room/{roomCode}
+     * - /queue/room/{roomCode}
      * 
      * @param destination Subscription destination
      * @return Room code, or null if not a room subscription
@@ -200,9 +216,16 @@ public class WebSocketEventHandler {
             return null;
         }
         
-        Matcher matcher = ROOM_DESTINATION_PATTERN.matcher(destination);
-        if (matcher.matches()) {
-            return matcher.group(1);
+        // Check topic pattern
+        Matcher topicMatcher = ROOM_TOPIC_PATTERN.matcher(destination);
+        if (topicMatcher.matches()) {
+            return topicMatcher.group(1);
+        }
+        
+        // Check queue pattern
+        Matcher queueMatcher = ROOM_QUEUE_PATTERN.matcher(destination);
+        if (queueMatcher.matches()) {
+            return queueMatcher.group(1);
         }
         
         return null;

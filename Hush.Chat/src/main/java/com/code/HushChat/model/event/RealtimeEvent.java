@@ -4,12 +4,11 @@ import java.time.LocalDateTime;
 
 /**
  * Base interface for all real-time events in Hush.Chat.
- * Provides a unified event model for both Long Polling and WebSocket implementations.
+ * Provides a unified event model for WebSocket-based real-time communication.
  * 
- * All events must implement this interface to ensure consistency across
- * different real-time communication mechanisms.
+ * NOTE: Long polling support intentionally removed. WebSocket is the ONLY transport.
  * 
- * @since 1.0.0
+ * @since 2.0.0 (WebSocket-only version)
  */
 public interface RealtimeEvent {
     

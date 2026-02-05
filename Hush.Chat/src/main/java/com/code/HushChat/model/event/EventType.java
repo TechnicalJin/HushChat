@@ -2,7 +2,9 @@ package com.code.HushChat.model.event;
 
 /**
  * Enumeration of all real-time event types in Hush.Chat.
- * Used by both Long Polling and WebSocket implementations.
+ * Used by WebSocket-based real-time communication.
+ * 
+ * NOTE: Long polling support intentionally removed. WebSocket is the ONLY transport.
  * 
  * Event categories:
  * - MESSAGE_*: Message lifecycle events
@@ -11,7 +13,7 @@ package com.code.HushChat.model.event;
  * - ROOM_*: Room lifecycle events
  * - SYSTEM_*: System notifications
  * 
- * @since 1.0.0
+ * @since 2.0.0 (WebSocket-only version)
  */
 public enum EventType {
     
@@ -51,7 +53,7 @@ public enum EventType {
     
     /**
      * Generic reaction event (add or remove)
-     * Legacy support for current PollEventDto.REACTION
+     * Consolidated from REACTION_ADD and REACTION_REMOVE for simpler handling
      */
     REACTION,
     

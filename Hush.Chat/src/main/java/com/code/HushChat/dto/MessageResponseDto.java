@@ -19,6 +19,7 @@ public class MessageResponseDto {
     private String content;
     private String type;
     private String fileId; // Optional: for file messages
+    private String downloadUrl; // Optional: for file messages - download URL
     private LocalDateTime timestamp;
     private LocalDateTime expiryTime;
     private boolean edited;

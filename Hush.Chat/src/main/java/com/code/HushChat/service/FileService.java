@@ -2,11 +2,16 @@ package com.code.HushChat.service;
 
 import com.code.HushChat.config.AppConfig;
 import com.code.HushChat.dto.FileUploadResponseDto;
+import com.code.HushChat.dto.MessageResponseDto;
+import com.code.HushChat.dto.WebSocketEventDto;
 import com.code.HushChat.exception.RoomNotFoundException;
 import com.code.HushChat.exception.UnauthorizedException;
 import com.code.HushChat.model.ChatMessage;
 import com.code.HushChat.model.ChatRoom;
 import com.code.HushChat.model.FileMetadata;
+import com.code.HushChat.model.event.BaseRealtimeEvent;
+import com.code.HushChat.model.event.RealtimeEvent;
+import com.code.HushChat.realtime.RealtimeDispatcher;
 import com.code.HushChat.storage.InMemoryFileStore;
 import com.code.HushChat.storage.InMemoryMessageStore;
 import com.code.HushChat.storage.InMemoryRoomStore;
@@ -24,6 +29,9 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+// NOTE: Long polling (PollEventDto) intentionally removed.
+// All real-time communication now uses WebSocket-only transport.
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -35,6 +43,7 @@ public class FileService {
     private final RoomService roomService;
     private final AppConfig appConfig;
     private final RateLimiter rateLimiter;
+    private final RealtimeDispatcher realtimeDispatcher;
 
     /**
      * Upload a file for a room and return metadata + download URL.
@@ -136,6 +145,9 @@ public class FileService {
         log.info("File uploaded - id: {}, room: {}, user: {}, name: {}, size: {} bytes",
                 fileId, roomCode, userId, originalFilename, sizeBytes);
 
+        // Broadcast file message to all users in the room via WebSocket
+        dispatchFileMessageEvent(roomCode, message, senderName, downloadUrl);
+
         return FileUploadResponseDto.builder()
                 .fileId(fileId)
                 .roomCode(roomCode)
@@ -178,6 +190,37 @@ public class FileService {
         }
 
         return metadata;
+    }
+    
+    /**
+     * Dispatch new file message event via WebSocket.
+     */
+    private void dispatchFileMessageEvent(String roomCode, ChatMessage message, String senderName, String downloadUrl) {
+        try {
+            // Create MessageResponseDto for the file message
+            MessageResponseDto responseDto = MessageResponseDto.builder()
+                    .messageId(message.getMessageId())
+                    .roomCode(roomCode)
+                    .senderId(message.getUserId())
+                    .senderName(senderName)
+                    .content(message.getContent())
+                    .type(message.getType().name())
+                    .fileId(message.getFileId())
+                    .downloadUrl(downloadUrl)
+                    .timestamp(message.getTimestamp())
+                    .expiryTime(message.getExpiryTime())
+                    .edited(false)
+                    .deleted(false)
+                    .lastModified(message.getLastModified())
+                    .build();
+            
+            RealtimeEvent event = BaseRealtimeEvent.messageEvent(roomCode, 
+                WebSocketEventDto.messageEvent(roomCode, responseDto));
+            realtimeDispatcher.dispatch(event, null);
+            log.debug("Dispatched file message event for room {} via WebSocket", roomCode);
+        } catch (Exception e) {
+            log.error("Failed to dispatch file message event: {}", e.getMessage(), e);
+        }
     }
 }
 

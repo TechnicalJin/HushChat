@@ -32,11 +32,7 @@ const api = {
                 'Content-Type': 'application/json'
             };
 
-            // For long polling endpoints, use a much longer timeout (30 seconds + buffer)
-            let effectiveTimeout = timeoutMs || config.REQUEST_TIMEOUT;
-            if (endpoint.includes('/poll')) {
-                effectiveTimeout = config.LONG_POLL_TIMEOUT || 35000;
-            }
+            const effectiveTimeout = timeoutMs || config.REQUEST_TIMEOUT;
 
             const response = await fetch(`${config.API_BASE_URL}${endpoint}`, {
                 method: 'GET',
@@ -169,7 +165,7 @@ const api = {
      * Handle API errors
      */
     handleError(error) {
-        // Don't log timeout errors as errors (expected in long polling)
+        // Don't log timeout errors as errors (can be expected behavior)
         const isTimeout = error.name === 'TimeoutError' || 
                           error.name === 'AbortError' ||
                           (error.message && error.message.includes('timed out'));

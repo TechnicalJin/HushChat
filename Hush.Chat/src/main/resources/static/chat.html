@@ -129,7 +129,12 @@
 <script src="js/utils.js"></script>
 <script src="js/emoji.js"></script>
 <script src="js/chat.js"></script>
-<script src="js/polling.js"></script>
+<!-- WebSocket Transport (WebSocket-only - polling.js removed) -->
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+<script src="js/eventProcessor.js"></script>
+<script src="js/webSocketAdapter.js"></script>
+<script src="js/transportFactory.js"></script>
 <script>
     // Check if user has joined a room
     const roomCode = localStorage.getItem('roomCode');
@@ -198,9 +203,9 @@
 
     document.getElementById('confirmLeave').addEventListener('click', async () => {
         try {
-            // Stop polling first
-            if (typeof polling !== 'undefined') {
-                polling.stopPolling();
+            // Stop WebSocket transport first
+            if (typeof transportFactory !== 'undefined') {
+                transportFactory.cleanup();
             }
             
             await api.post('/rooms/leave', {

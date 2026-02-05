@@ -1,6 +1,6 @@
 package com.code.HushChat.service;
 
-import com.code.HushChat.dto.PollEventDto;
+import com.code.HushChat.dto.WebSocketEventDto;
 import com.code.HushChat.dto.ReactionResponseDto;
 import com.code.HushChat.dto.ReactionResponseDto.EmojiCount;
 import com.code.HushChat.dto.ReactionResponseDto.ReactionSummary;
@@ -21,9 +21,12 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+// NOTE: Long polling (PollEventDto) intentionally removed.
+// All real-time communication now uses WebSocket-only transport.
+
 /**
  * Service for managing message reactions (emoji reactions).
- * Uses RealtimeDispatcher for transport-agnostic event delivery.
+ * Uses RealtimeDispatcher for WebSocket event delivery.
  */
 @Service
 @RequiredArgsConstructor
@@ -75,8 +78,8 @@ public class ReactionService {
         String action = result != null ? "added" : "removed";
         log.info("Reaction {} {} on message {} by user {}", emoji, action, messageId, userId);
         
-        // Notify all pending long-poll requests for this room about the reaction change
-        notifyPendingPolls(roomCode, messageId, emoji, userId, userName, action);
+        // Dispatch reaction event via WebSocket to all room members
+        dispatchReactionEvent(roomCode, messageId, emoji, userId, userName, action);
         
         return ReactionResponseDto.builder()
                 .reactionId(result != null ? result.getReactionId() : null)
@@ -91,17 +94,16 @@ public class ReactionService {
     }
     
     /**
-     * Notify all pending long-poll requests about a reaction change.
-     * This wakes up all users in the room so they see the reaction update.
+     * Dispatch reaction event via WebSocket.
      */
-    private void notifyPendingPolls(String roomCode, String messageId, String emoji, 
+    private void dispatchReactionEvent(String roomCode, String messageId, String emoji, 
                                      String userId, String userName, String action) {
         try {
             // Get updated reaction counts for the message
-            Map<String, PollEventDto.ReactionInfo> updatedCounts = getReactionInfoForMessage(roomCode, messageId);
+            Map<String, WebSocketEventDto.ReactionInfo> updatedCounts = getReactionInfoForMessage(roomCode, messageId);
             
             // Create reaction event
-            PollEventDto reactionEvent = PollEventDto.reactionEvent(
+            WebSocketEventDto reactionEvent = WebSocketEventDto.reactionEvent(
                     roomCode,
                     messageId,
                     emoji,
@@ -115,20 +117,20 @@ public class ReactionService {
             RealtimeEvent event = BaseRealtimeEvent.reactionEvent(roomCode, reactionEvent);
             realtimeDispatcher.dispatch(event, null);
             
-            log.debug("Notified pending polls for room {} about reaction {} by {}", 
+            log.debug("Dispatched reaction event for room {} via WebSocket: {} by {}", 
                      roomCode, emoji, userId);
         } catch (Exception e) {
-            log.error("Failed to notify pending polls for reaction: {}", e.getMessage(), e);
+            log.error("Failed to dispatch reaction event: {}", e.getMessage(), e);
         }
     }
     
     /**
-     * Get reaction info in PollEventDto format for a message
+     * Get reaction info in WebSocketEventDto format for a message
      */
-    private Map<String, PollEventDto.ReactionInfo> getReactionInfoForMessage(String roomCode, String messageId) {
+    private Map<String, WebSocketEventDto.ReactionInfo> getReactionInfoForMessage(String roomCode, String messageId) {
         List<MessageReaction> reactions = reactionStore.getReactionsForMessage(roomCode, messageId);
         
-        Map<String, PollEventDto.ReactionInfo> result = new HashMap<>();
+        Map<String, WebSocketEventDto.ReactionInfo> result = new HashMap<>();
         
         // Group reactions by emoji
         Map<String, List<MessageReaction>> grouped = reactions.stream()
@@ -138,7 +140,7 @@ public class ReactionService {
             String emojiKey = entry.getKey();
             List<MessageReaction> emojiReactions = entry.getValue();
             
-            result.put(emojiKey, PollEventDto.ReactionInfo.builder()
+            result.put(emojiKey, WebSocketEventDto.ReactionInfo.builder()
                     .count(emojiReactions.size())
                     .userIds(emojiReactions.stream().map(MessageReaction::getUserId).collect(Collectors.toList()))
                     .userNames(emojiReactions.stream().map(MessageReaction::getUserName).collect(Collectors.toList()))
