@@ -56,7 +56,7 @@ body {
     overflow: hidden;
 }
 
-/* Chat Header - Compact design */
+/* Chat Header - Premium presence design */
 .chat-header {
     background: var(--surface-color);
     border-bottom: 2px solid var(--border-color);
@@ -66,14 +66,15 @@ body {
     align-items: center;
     gap: 12px;
     flex-shrink: 0;
+    position: relative;
 }
 
 .room-info {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    min-width: 0; /* Allow text truncation */
-    flex: 1;
+    min-width: 0;
+    flex-shrink: 1;
 }
 
 .room-info h2 {
@@ -106,8 +107,275 @@ body {
     letter-spacing: 0.5px;
 }
 
-.user-count {
+/* ============================================
+   PRESENCE SECTION (member count + dots)
+   ============================================ */
+
+.presence-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 8px;
+    transition: background-color 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.presence-section:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Member count - stable, muted, no animation */
+.member-count {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
     white-space: nowrap;
+    line-height: 1;
+}
+
+/* Presence dots container */
+.presence-dots {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    transition: width 200ms ease-out;
+}
+
+/* Individual presence dot */
+.presence-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: #10b981;
+    opacity: 0.85;
+    flex-shrink: 0;
+    transition: opacity 200ms ease-out, transform 250ms ease-out;
+}
+
+/* Dot enter animation */
+.presence-dot.entering {
+    opacity: 0;
+    transform: scale(0.9);
+}
+
+.presence-dot.entered {
+    opacity: 0.85;
+    transform: scale(1);
+}
+
+/* Dot exit animation */
+.presence-dot.exiting {
+    opacity: 0;
+    transform: scale(0.9);
+}
+
+/* Overflow badge (+N) */
+.presence-overflow {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    white-space: nowrap;
+    line-height: 1;
+    opacity: 0.85;
+    flex-shrink: 0;
+    transition: opacity 200ms ease-out;
+}
+
+/* Hover intent on presence dots area */
+.presence-section:hover .presence-dot {
+    opacity: 1;
+}
+
+.presence-section:hover .presence-overflow {
+    opacity: 1;
+}
+
+/* ============================================
+   PRESENCE TOOLTIP (Desktop)
+   ============================================ */
+
+.presence-tooltip {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 80px;
+    z-index: 100;
+    background: #1a2332;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 12px 14px;
+    min-width: 180px;
+    max-width: 260px;
+    max-height: 280px;
+    overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+    /* Hidden by default */
+    opacity: 0;
+    transform: translateY(-3px);
+    pointer-events: none;
+    transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
+
+.presence-tooltip.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.presence-tooltip-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.presence-tooltip-group {
+    margin-bottom: 6px;
+}
+
+.presence-tooltip-group:last-child {
+    margin-bottom: 0;
+}
+
+.presence-tooltip-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.presence-tooltip-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 0;
+    font-size: 0.8rem;
+    color: var(--text-color);
+}
+
+.presence-tooltip-user .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.presence-tooltip-user .dot.active {
+    background-color: #10b981;
+}
+
+.presence-tooltip-user .dot.inactive {
+    background-color: #64748b;
+}
+
+.presence-tooltip-user .you-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* ============================================
+   PRESENCE BOTTOM SHEET (Mobile)
+   ============================================ */
+
+.presence-sheet-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 199;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transition: opacity 250ms ease;
+}
+
+.presence-sheet-backdrop.visible {
+    display: block;
+    opacity: 1;
+}
+
+.presence-sheet {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background: #1a2332;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    padding: 12px 20px 24px;
+    max-height: 55vh;
+    overflow-y: auto;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+
+    transform: translateY(100%);
+    transition: transform 250ms ease;
+}
+
+.presence-sheet.visible {
+    display: block;
+    transform: translateY(0);
+}
+
+.presence-sheet-handle {
+    width: 36px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    margin: 0 auto 12px;
+}
+
+.presence-sheet-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-color);
+    margin-bottom: 12px;
+}
+
+.presence-sheet-content {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Reuse tooltip classes for sheet content */
+.presence-sheet .presence-tooltip-group {
+    margin-bottom: 10px;
+}
+
+.presence-sheet .presence-tooltip-label {
+    font-size: 0.7rem;
+}
+
+.presence-sheet .presence-tooltip-user {
+    padding: 6px 0;
+    font-size: 0.85rem;
+}
+
+.presence-sheet .presence-tooltip-user .dot {
+    width: 8px;
+    height: 8px;
+}
+
+/* ============================================
+   RESPONSIVE: Show tooltip on desktop, sheet on mobile
+   ============================================ */
+
+@media (max-width: 600px) {
+    .presence-tooltip {
+        display: none !important;
+    }
+
+    .presence-section {
+        padding: 8px 10px;
+    }
 }
 
 .btn-leave {

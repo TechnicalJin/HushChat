@@ -178,6 +178,11 @@ const webSocketAdapter = {
         
         // Subscribe to room events
         this.subscribeToRoom();
+        
+        // Notify presence manager of connection
+        if (typeof presenceManager !== 'undefined' && presenceManager.onConnectionChange) {
+            presenceManager.onConnectionChange(true);
+        }
     },
     
     /**
@@ -248,6 +253,11 @@ const webSocketAdapter = {
         this.connected = false;
         this.connecting = false;
         
+        // Notify presence manager of disconnection
+        if (typeof presenceManager !== 'undefined' && presenceManager.onConnectionChange) {
+            presenceManager.onConnectionChange(false);
+        }
+        
         // Attempt reconnection
         this.attemptReconnect();
     },
@@ -261,6 +271,11 @@ const webSocketAdapter = {
         console.warn('[WebSocket] Disconnected:', event?.reason || 'Unknown reason');
         this.connected = false;
         this.connecting = false;
+        
+        // Notify presence manager of disconnection
+        if (typeof presenceManager !== 'undefined' && presenceManager.onConnectionChange) {
+            presenceManager.onConnectionChange(false);
+        }
         
         // Clear subscription
         if (this.subscription) {

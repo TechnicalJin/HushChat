@@ -179,6 +179,10 @@ const eventProcessor = {
             case 'REACTION':
                 this.handleReactionEvent(event);
                 break;
+            
+            case 'PRESENCE':
+                this.handlePresenceEvent(event);
+                break;
 
             case 'ROOM_CLOSED':
                 if (typeof chat !== 'undefined' && chat.handleRoomClosed) {
@@ -334,6 +338,20 @@ const eventProcessor = {
                 <span class="reaction-count">${data.count}</span>
             `;
             reactionsContainer.appendChild(badge);
+        }
+    },
+
+    /**
+     * Handle presence events.
+     * Routes to presenceManager for processing.
+     * 
+     * @param {Object} event - Presence event
+     */
+    handlePresenceEvent(event) {
+        if (typeof presenceManager !== 'undefined' && presenceManager.handlePresenceUpdate) {
+            presenceManager.handlePresenceUpdate(event);
+        } else {
+            console.debug('[EventProcessor] PresenceManager not available, presence event ignored');
         }
     },
 

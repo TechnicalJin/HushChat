@@ -45,6 +45,10 @@ const chat = {
     // FIX 10: Toast notification queue
     activeToast: null,
 
+    // Presence tracking
+    userPresenceMap: {},  // userId -> isActive
+    activeUserCount: 0,
+
     /**
      * Initialize chat module
      */
@@ -80,6 +84,19 @@ const chat = {
         this.setupReplyPreviewListeners();
         this.setupMobileViewportFix(); // FIX: Handle mobile viewport issues
         this.startExpiryCountdownUpdater();
+
+        // Initialize presence manager
+        if (typeof presenceManager !== 'undefined') {
+            presenceManager.init(
+                this.roomCode,
+                this.userId,
+                (presenceMap, activeCount) => this.handlePresenceUpdate(presenceMap, activeCount)
+            );
+            console.log('Presence manager initialized');
+        }
+
+        // Setup presence tooltip / bottom sheet interactions
+        this.setupPresencePanelListeners();
 
         // Initialize Transport (try WebSocket, fallback to Polling)
         if (typeof transportFactory !== 'undefined') {
@@ -1941,6 +1958,281 @@ const chat = {
             messageDiv.remove();
             this.displayedMessageIds.delete(messageId);
         }, 300);
+    },
+
+    /**
+     * Handle presence update from server.
+     * Renders green dots + member count in header.
+     * 
+     * @param {Object} presenceMap - Map of userId -> isActive
+     * @param {number} activeCount - Number of active users
+     */
+    handlePresenceUpdate(presenceMap, activeCount) {
+        this.userPresenceMap = presenceMap;
+        this.activeUserCount = activeCount;
+        
+        console.log('[Chat] Presence updated:', { activeCount, totalUsers: Object.keys(presenceMap).length });
+        
+        this.renderPresenceDots();
+    },
+
+    /**
+     * Render presence dots in header.
+     * Max 3 dots + "+N" overflow badge.
+     * Dots animate in/out with CSS transitions.
+     */
+    renderPresenceDots() {
+        const dotsContainer = document.getElementById('presenceDots');
+        if (!dotsContainer) return;
+
+        const MAX_DOTS = 3;
+        const activeUsers = this.activeUserCount;
+
+        // Determine target dot count
+        const targetDots = Math.min(activeUsers, MAX_DOTS);
+        const overflow = activeUsers > MAX_DOTS ? activeUsers - MAX_DOTS : 0;
+
+        // Current dots (excluding overflow badge)
+        const currentDots = dotsContainer.querySelectorAll('.presence-dot:not(.exiting)');
+        const currentCount = currentDots.length;
+
+        // Add dots
+        if (targetDots > currentCount) {
+            for (let i = currentCount; i < targetDots; i++) {
+                const dot = document.createElement('span');
+                dot.className = 'presence-dot entering';
+                dotsContainer.insertBefore(dot, dotsContainer.querySelector('.presence-overflow'));
+                // Trigger enter animation
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        dot.classList.remove('entering');
+                        dot.classList.add('entered');
+                    });
+                });
+            }
+        }
+        // Remove excess dots
+        else if (targetDots < currentCount) {
+            const toRemove = currentCount - targetDots;
+            for (let i = 0; i < toRemove; i++) {
+                const dot = currentDots[currentCount - 1 - i];
+                dot.classList.add('exiting');
+                dot.addEventListener('transitionend', () => dot.remove(), { once: true });
+                // Fallback removal
+                setTimeout(() => { if (dot.parentNode) dot.remove(); }, 300);
+            }
+        }
+
+        // Overflow badge
+        let overflowEl = dotsContainer.querySelector('.presence-overflow');
+        if (overflow > 0) {
+            if (!overflowEl) {
+                overflowEl = document.createElement('span');
+                overflowEl.className = 'presence-overflow';
+                dotsContainer.appendChild(overflowEl);
+            }
+            overflowEl.textContent = `+${overflow}`;
+        } else if (overflowEl) {
+            overflowEl.remove();
+        }
+
+        console.debug('[Chat] Presence dots rendered:', { targetDots, overflow });
+    },
+
+    /**
+     * Render member count text (called from loadRoomInfo).
+     * @param {number} current - current user count
+     * @param {number} max - max user count
+     */
+    renderMemberCount(current, max) {
+        const el = document.getElementById('memberCount');
+        if (el) {
+            el.textContent = `👥 ${current}/${max}`;
+        }
+    },
+
+    /**
+     * Build the user list HTML for tooltip / bottom sheet.
+     * Groups users into Active Now and Offline sections.
+     * @returns {string} HTML string
+     */
+    buildPresenceUserListHTML() {
+        const presenceMap = this.userPresenceMap;
+        const allUserIds = Object.keys(presenceMap);
+        const activeIds = allUserIds.filter(uid => presenceMap[uid] === true);
+        const inactiveIds = allUserIds.filter(uid => presenceMap[uid] !== true);
+
+        // We only have userId, not userName in presenceMap.
+        // Display userId (which in Hush.Chat is the username string).
+        const currentUserId = this.userId;
+
+        let html = '';
+
+        // Active section
+        if (activeIds.length > 0) {
+            html += '<div class="presence-tooltip-group">';
+            html += '<div class="presence-tooltip-label">Active Now</div>';
+            activeIds.forEach(uid => {
+                const youLabel = uid === currentUserId ? ' <span class="you-label">(You)</span>' : '';
+                html += `<div class="presence-tooltip-user"><span class="dot active"></span>${this.escapeHtml(uid)}${youLabel}</div>`;
+            });
+            html += '</div>';
+        }
+
+        // Inactive section
+        if (inactiveIds.length > 0) {
+            html += '<div class="presence-tooltip-group">';
+            html += '<div class="presence-tooltip-label">Offline</div>';
+            inactiveIds.forEach(uid => {
+                const youLabel = uid === currentUserId ? ' <span class="you-label">(You)</span>' : '';
+                html += `<div class="presence-tooltip-user"><span class="dot inactive"></span>${this.escapeHtml(uid)}${youLabel}</div>`;
+            });
+            html += '</div>';
+        }
+
+        if (allUserIds.length === 0) {
+            html = '<div class="presence-tooltip-user" style="color:var(--text-secondary)">No members</div>';
+        }
+
+        return html;
+    },
+
+    /**
+     * Show presence tooltip (desktop) or bottom sheet (mobile).
+     */
+    showPresencePanel() {
+        const isMobile = window.innerWidth <= 600;
+        const html = this.buildPresenceUserListHTML();
+
+        if (isMobile) {
+            // Bottom sheet
+            const content = document.getElementById('presenceSheetContent');
+            const sheet = document.getElementById('presenceSheet');
+            const backdrop = document.getElementById('presenceSheetBackdrop');
+            if (content) content.innerHTML = html;
+            if (backdrop) backdrop.classList.add('visible');
+            // Force reflow for transition
+            if (sheet) {
+                sheet.style.display = 'block';
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        sheet.classList.add('visible');
+                    });
+                });
+            }
+        } else {
+            // Desktop tooltip
+            const content = document.getElementById('presenceTooltipContent');
+            const tooltip = document.getElementById('presenceTooltip');
+            if (content) content.innerHTML = html;
+            if (tooltip) tooltip.classList.add('visible');
+        }
+    },
+
+    /**
+     * Hide presence tooltip and bottom sheet.
+     */
+    hidePresencePanel() {
+        // Tooltip
+        const tooltip = document.getElementById('presenceTooltip');
+        if (tooltip) tooltip.classList.remove('visible');
+
+        // Bottom sheet
+        const sheet = document.getElementById('presenceSheet');
+        const backdrop = document.getElementById('presenceSheetBackdrop');
+        if (sheet) {
+            sheet.classList.remove('visible');
+            sheet.addEventListener('transitionend', () => {
+                if (!sheet.classList.contains('visible')) {
+                    sheet.style.display = 'none';
+                }
+            }, { once: true });
+        }
+        if (backdrop) backdrop.classList.remove('visible');
+    },
+
+    /**
+     * Setup presence panel interactions.
+     * Desktop: hover with 150ms delay. Mobile: tap.
+     */
+    setupPresencePanelListeners() {
+        const section = document.getElementById('presenceSection');
+        const tooltip = document.getElementById('presenceTooltip');
+        const backdrop = document.getElementById('presenceSheetBackdrop');
+        if (!section) return;
+
+        let hoverTimeout = null;
+        let isTooltipHovered = false;
+        let isSectionHovered = false;
+
+        const showWithDelay = () => {
+            hoverTimeout = setTimeout(() => this.showPresencePanel(), 150);
+        };
+
+        const cancelShow = () => {
+            if (hoverTimeout) {
+                clearTimeout(hoverTimeout);
+                hoverTimeout = null;
+            }
+        };
+
+        const hideIfNotHovered = () => {
+            cancelShow();
+            setTimeout(() => {
+                if (!isSectionHovered && !isTooltipHovered) {
+                    this.hidePresencePanel();
+                }
+            }, 100);
+        };
+
+        // Desktop: hover on section
+        section.addEventListener('mouseenter', () => {
+            isSectionHovered = true;
+            showWithDelay();
+        });
+        section.addEventListener('mouseleave', () => {
+            isSectionHovered = false;
+            hideIfNotHovered();
+        });
+
+        // Keep tooltip open when hovering over it
+        if (tooltip) {
+            tooltip.addEventListener('mouseenter', () => {
+                isTooltipHovered = true;
+            });
+            tooltip.addEventListener('mouseleave', () => {
+                isTooltipHovered = false;
+                hideIfNotHovered();
+            });
+        }
+
+        // Mobile: tap to toggle
+        section.addEventListener('click', (e) => {
+            if (window.innerWidth <= 600) {
+                e.preventDefault();
+                const sheet = document.getElementById('presenceSheet');
+                if (sheet && sheet.classList.contains('visible')) {
+                    this.hidePresencePanel();
+                } else {
+                    this.showPresencePanel();
+                }
+            }
+        });
+
+        // Close sheet on backdrop tap
+        if (backdrop) {
+            backdrop.addEventListener('click', () => this.hidePresencePanel());
+        }
+
+        // Keyboard accessibility
+        section.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.showPresencePanel();
+            } else if (e.key === 'Escape') {
+                this.hidePresencePanel();
+            }
+        });
     },
 
     /**

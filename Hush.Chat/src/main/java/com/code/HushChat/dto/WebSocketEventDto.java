@@ -20,6 +20,7 @@ import java.util.Map;
  * - MESSAGE_EDIT: Message was edited
  * - MESSAGE_DELETE: Message was deleted/unsent
  * - REACTION: Reaction added or removed
+ * - PRESENCE: User presence update (active/inactive)
  * 
  * @since 2.0.0 (WebSocket-only version)
  */
@@ -36,7 +37,8 @@ public class WebSocketEventDto {
         MESSAGE,        // New message
         MESSAGE_EDIT,   // Message edited
         MESSAGE_DELETE, // Message deleted/unsent
-        REACTION        // Reaction added/removed
+        REACTION,       // Reaction added/removed
+        PRESENCE        // User presence update
     }
     
     /**
@@ -93,6 +95,19 @@ public class WebSocketEventDto {
      * Map of emoji -> reaction info (count, userIds, userNames)
      */
     private Map<String, ReactionInfo> updatedReactionCounts;
+    
+    // ============== PRESENCE FIELDS ==============
+    
+    /**
+     * For PRESENCE events: map of userId -> isActive
+     * All users in room with their current presence status
+     */
+    private Map<String, Boolean> presenceMap;
+    
+    /**
+     * For PRESENCE events: count of currently active users
+     */
+    private Integer activeCount;
     
     /**
      * Reaction info for a specific emoji
@@ -161,6 +176,19 @@ public class WebSocketEventDto {
                 .reactedByUserName(reactedByUserName)
                 .action(action)
                 .updatedReactionCounts(updatedCounts)
+                .build();
+    }
+    
+    /**
+     * Create a PRESENCE event
+     */
+    public static WebSocketEventDto presenceEvent(String roomCode, Map<String, Boolean> presenceMap, int activeCount) {
+        return WebSocketEventDto.builder()
+                .type(EventType.PRESENCE)
+                .roomCode(roomCode)
+                .timestamp(LocalDateTime.now())
+                .presenceMap(presenceMap)
+                .activeCount(activeCount)
                 .build();
     }
 }

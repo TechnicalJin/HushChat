@@ -67,6 +67,7 @@ public class EventConverter {
             case MESSAGE_EDIT -> WebSocketEventDto.EventType.MESSAGE_EDIT;
             case MESSAGE_DELETE -> WebSocketEventDto.EventType.MESSAGE_DELETE;
             case REACTION, REACTION_ADD, REACTION_REMOVE -> WebSocketEventDto.EventType.REACTION;
+            case USER_PRESENCE -> WebSocketEventDto.EventType.PRESENCE;
             // Future event types default to MESSAGE
             default -> WebSocketEventDto.EventType.MESSAGE;
         };

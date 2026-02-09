@@ -15,18 +15,33 @@
 </head>
 <body>
 <div class="chat-container">
-    <!-- Chat Header - Compact design for mobile -->
+    <!-- Chat Header - Premium presence design -->
     <header class="chat-header">
         <div class="room-info">
             <h2 id="roomName">Loading...</h2>
             <div class="room-meta">
                 <span class="room-code"><strong id="roomCode">-----</strong></span>
-                <span class="separator">•</span>
-                <span class="user-count" id="userCount">👥 0/10</span>
             </div>
+        </div>
+        <div class="presence-section" id="presenceSection" role="button" tabindex="0" aria-label="View members">
+            <span class="member-count" id="memberCount">👥 0/10</span>
+            <div class="presence-dots" id="presenceDots"></div>
         </div>
         <button id="leaveRoomBtn" class="btn-leave">Leave</button>
     </header>
+
+    <!-- Presence Tooltip (Desktop) -->
+    <div class="presence-tooltip" id="presenceTooltip">
+        <div class="presence-tooltip-content" id="presenceTooltipContent"></div>
+    </div>
+
+    <!-- Presence Bottom Sheet (Mobile) -->
+    <div class="presence-sheet-backdrop" id="presenceSheetBackdrop"></div>
+    <div class="presence-sheet" id="presenceSheet">
+        <div class="presence-sheet-handle"></div>
+        <div class="presence-sheet-title">Room Members</div>
+        <div class="presence-sheet-content" id="presenceSheetContent"></div>
+    </div>
 
     <!-- Messages Area -->
     <main class="messages-container" id="messagesContainer">
@@ -137,6 +152,7 @@
 <!-- WebSocket Transport -->
 <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+<script src="js/presenceManager.js"></script>
 <script src="js/eventProcessor.js"></script>
 <script src="js/webSocketAdapter.js"></script>
 <script src="js/transportFactory.js"></script>
@@ -170,8 +186,13 @@
             const response = await api.get(`/rooms/${roomCode}/info`);
             if (response.success) {
                 const info = response.data;
-                document.getElementById('userCount').textContent = 
-                    `👥 ${info.currentUsers}/${info.maxUsers}`;
+                // Update member count via chat module if available
+                if (typeof chat !== 'undefined' && chat.renderMemberCount) {
+                    chat.renderMemberCount(info.currentUsers, info.maxUsers);
+                } else {
+                    document.getElementById('memberCount').textContent = 
+                        `👥 ${info.currentUsers}/${info.maxUsers}`;
+                }
             }
         } catch (error) {
             // Only log once, not repeatedly

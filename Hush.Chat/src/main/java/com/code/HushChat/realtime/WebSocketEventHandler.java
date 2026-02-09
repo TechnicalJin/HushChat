@@ -1,5 +1,6 @@
 package com.code.HushChat.realtime;
 
+import com.code.HushChat.service.PresenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -26,6 +27,7 @@ import java.util.regex.Pattern;
  * Responsibilities:
  * - Register sessions in WebSocketSessionRegistry
  * - Track room subscriptions
+ * - Update user presence on connect/disconnect
  * - Clean up on disconnect
  * - Log connection events
  * 
@@ -33,7 +35,7 @@ import java.util.regex.Pattern;
  * 1. CONNECT -> Extract userId from session attributes
  * 2. SUBSCRIBE -> Extract roomCode from destination, register session
  * 3. UNSUBSCRIBE -> Optional cleanup (session persists)
- * 4. DISCONNECT -> Unregister session, clean up all mappings
+ * 4. DISCONNECT -> Unregister session, clean up all mappings, mark presence inactive
  * 
  * @since 1.0.0
  */
@@ -43,6 +45,7 @@ import java.util.regex.Pattern;
 public class WebSocketEventHandler {
     
     private final WebSocketSessionRegistry sessionRegistry;
+    private final PresenceService presenceService;
     
     /**
      * Pattern to extract room code from subscription destination.
@@ -156,6 +159,7 @@ public class WebSocketEventHandler {
      * Handle WebSocket disconnection.
      * 
      * Performs full cleanup:
+     * - Mark user as disconnected (presence = inactive)
      * - Unregister session from registry
      * - Remove user from all room mappings
      * - Clean up empty collections
@@ -170,6 +174,15 @@ public class WebSocketEventHandler {
         
         log.info("WebSocket disconnected: sessionId={}, userId={}", 
                  sessionId, userId != null ? userId : "unknown");
+        
+        // Get room code before unregistering (needed for presence cleanup)
+        String roomCode = sessionRegistry.getRoomCodeForSession(sessionId);
+        
+        // Mark user as disconnected in presence service
+        if (roomCode != null && userId != null) {
+            presenceService.updateConnection(roomCode, userId, false);
+            log.debug("User marked as disconnected: roomCode={}, userId={}", roomCode, userId);
+        }
         
         // Unregister session from registry (handles all cleanup)
         sessionRegistry.unregisterSession(sessionId);
