@@ -83,7 +83,7 @@ public class RoomController {
             ApiResponse.success("Joined room successfully", response)
         );
     }
-    
+                   
     /**
      * Leave a chat room
      */

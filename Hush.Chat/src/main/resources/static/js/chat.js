@@ -60,6 +60,7 @@ const chat = {
         this.messagesContainer = document.getElementById('messagesContainer');
         this.messageInput = document.getElementById('messageInput');
         this.messageForm = document.getElementById('messageForm');
+        this.sendBtn = document.getElementById('sendBtn');
 
         // Initialize scroll-to-bottom elements
         this.scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
@@ -189,9 +190,10 @@ const chat = {
                 // SHIFT+ENTER allows default behavior (new line)
             });
 
-            // Auto-grow textarea as user types
+            // Auto-grow textarea and update send button state as user types
             this.messageInput.addEventListener('input', () => {
                 this.autoGrowTextarea();
+                this.updateSendButtonState();
             });
         }
 
@@ -218,6 +220,42 @@ const chat = {
                 this.cancelReply();
             }
         });
+
+        // Initialize send button state
+        this.updateSendButtonState();
+    },
+
+    /**
+     * Update send button enabled/disabled state based on input
+     */
+    updateSendButtonState() {
+        if (!this.sendBtn || !this.messageInput) return;
+
+        // Don't disable during edit mode - always allow save
+        if (this.editingMessageId) {
+            this.sendBtn.disabled = false;
+            return;
+        }
+
+        const hasContent = this.isMessageSendable(this.messageInput.value);
+        this.sendBtn.disabled = !hasContent;
+    },
+
+    /**
+     * Check if message content is sendable (has text or emoji)
+     * Handles Unicode emoji detection properly
+     */
+    isMessageSendable(message) {
+        if (!message) return false;
+
+        // Trim whitespace
+        const trimmed = message.trim();
+        if (trimmed.length === 0) return false;
+
+        // If it has visible characters after trim, it's sendable
+        // This works for text, emoji, or mixed content
+        // Unicode emojis have length > 0 after trim
+        return true;
     },
 
     /**
@@ -495,6 +533,7 @@ const chat = {
                 // Clear input and reset height
                 this.messageInput.value = '';
                 this.messageInput.style.height = 'auto';
+                this.updateSendButtonState();
 
                 // Clear reply state
                 this.cancelReply();
@@ -1712,14 +1751,14 @@ const chat = {
         this.autoGrowTextarea();
 
         // Change send button to save
-        const sendBtn = document.querySelector('.btn-send');
-        if (sendBtn) {
-            sendBtn.innerHTML = '<span>Save</span>';
-            sendBtn.classList.add('btn-editing');
+        if (this.sendBtn) {
+            this.sendBtn.innerHTML = '<span>Save</span>';
+            this.sendBtn.classList.add('btn-editing');
+            this.sendBtn.disabled = false; // Always enabled during edit
         }
 
         // Add cancel button if not exists
-        if (!document.querySelector('.btn-cancel-edit') && sendBtn) {
+        if (!document.querySelector('.btn-cancel-edit') && this.sendBtn) {
             const cancelBtn = document.createElement('button');
             cancelBtn.type = 'button';
             cancelBtn.className = 'btn-cancel-edit';
@@ -1727,7 +1766,7 @@ const chat = {
             cancelBtn.title = 'Cancel edit';
             cancelBtn.addEventListener('click', () => this.cancelEdit());
             // Insert before sendBtn in its parent container (message-input-row)
-            sendBtn.parentNode.insertBefore(cancelBtn, sendBtn);
+            this.sendBtn.parentNode.insertBefore(cancelBtn, this.sendBtn);
         }
 
         // Highlight the message being edited
@@ -1750,11 +1789,16 @@ const chat = {
         this.messageInput.value = '';
         this.messageInput.style.height = 'auto';
 
-        // Restore send button
-        const sendBtn = document.querySelector('.btn-send');
-        if (sendBtn) {
-            sendBtn.innerHTML = '<span>Send</span>';
-            sendBtn.classList.remove('btn-editing');
+        // Restore send button to icon
+        if (this.sendBtn) {
+            this.sendBtn.innerHTML = `
+                <svg class="send-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            `;
+            this.sendBtn.classList.remove('btn-editing');
+            this.updateSendButtonState(); // Reset to disabled if empty
         }
 
         // Remove cancel button

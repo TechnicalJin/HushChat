@@ -119,8 +119,8 @@ const emojiSystem = {
         // Save to recent emojis
         this.saveRecentEmoji(emoji);
         
-        // Close picker
-        this.closePicker();
+        // Keep picker open for multi-emoji selection
+        // Picker closes only via backdrop click, Escape key, or explicit close action
     },
     
     /**
@@ -145,7 +145,11 @@ const emojiSystem = {
         // Focus textarea
         textarea.focus();
         
-        // Trigger auto-grow
+        // Trigger input event to update send button state
+        const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+        textarea.dispatchEvent(inputEvent);
+        
+        // Trigger auto-grow (will be called by input listener but call explicitly for safety)
         if (typeof chat !== 'undefined' && chat.autoGrowTextarea) {
             chat.autoGrowTextarea();
         }
@@ -240,8 +244,8 @@ const emojiSystem = {
             if (response.success) {
                 const action = response.data.action;
                 
-                // Update UI
-                this.updateMessageReactions(messageId, emoji, action, userId);
+                // Fetch authoritative reaction state from server
+                await this.refreshMessageReactions(messageId);
                 
                 // Save to recent emojis
                 if (action === 'added') {
@@ -262,82 +266,41 @@ const emojiSystem = {
     },
     
     /**
-     * Update message reactions in the DOM
+     * Refresh reactions for a single message from server
+     * This ensures server-authoritative state, preventing count mismatches
      */
-    updateMessageReactions(messageId, emoji, action, userId) {
-        const messageDiv = document.querySelector(`[data-message-id="${messageId}"]`);
-        if (!messageDiv) return;
+    async refreshMessageReactions(messageId) {
+        const roomCode = localStorage.getItem('roomCode');
+        const userId = localStorage.getItem('userId');
         
-        // Get or find the reactions container (may already exist from rendering)
-        let reactionsContainer = messageDiv.querySelector('.message-reactions');
+        if (!roomCode || !messageId) return;
         
-        // Create reactions container if it doesn't exist
-        if (!reactionsContainer) {
-            if (action === 'removed') return; // Nothing to remove
+        try {
+            // Fetch authoritative reaction data from server
+            const response = await api.post(`/reactions/batch?roomCode=${roomCode}`, [messageId]);
             
-            reactionsContainer = document.createElement('div');
-            reactionsContainer.className = 'message-reactions';
-            reactionsContainer.dataset.messageId = messageId;
-            
-            // Insert before message footer
-            const footer = messageDiv.querySelector('.message-footer');
-            if (footer) {
-                footer.parentNode.insertBefore(reactionsContainer, footer);
-            } else {
-                messageDiv.appendChild(reactionsContainer);
-            }
-        }
-        
-        // Find or create the reaction badge for this emoji
-        let badge = reactionsContainer.querySelector(`[data-emoji="${emoji}"]`);
-        
-        if (action === 'added') {
-            if (badge) {
-                // Update existing badge
-                const countEl = badge.querySelector('.reaction-count');
-                let count = parseInt(countEl.textContent) || 0;
-                count++;
-                countEl.textContent = count;
-                badge.classList.add('active');
-            } else {
-                // Create new badge
-                badge = document.createElement('button');
-                badge.className = 'reaction-badge active';
-                badge.dataset.emoji = emoji;
-                badge.innerHTML = `
-                    <span class="reaction-emoji">${emoji}</span>
-                    <span class="reaction-count">1</span>
-                `;
-                
-                // Add click handler to toggle
-                badge.addEventListener('click', () => {
-                    this.addReaction(messageId, emoji);
-                });
-                
-                reactionsContainer.appendChild(badge);
-            }
-            // Show container
-            reactionsContainer.style.display = '';
-        } else if (action === 'removed') {
-            if (badge) {
-                const countEl = badge.querySelector('.reaction-count');
-                let count = parseInt(countEl.textContent) || 0;
-                count--;
-                
-                if (count <= 0) {
-                    // Remove badge
-                    badge.remove();
-                    
-                    // Hide container if empty
-                    if (reactionsContainer.querySelectorAll('.reaction-badge').length === 0) {
-                        reactionsContainer.style.display = 'none';
-                    }
-                } else {
-                    countEl.textContent = count;
-                    badge.classList.remove('active');
+            if (response.success && response.data && response.data[messageId]) {
+                const messageDiv = document.querySelector(`[data-message-id="${messageId}"]`);
+                if (messageDiv) {
+                    const summary = response.data[messageId];
+                    // Render reactions from server data only - no local manipulation
+                    this.renderMessageReactions(messageDiv, summary.reactions || {}, userId);
                 }
             }
+        } catch (error) {
+            console.warn('Failed to refresh reactions:', error);
         }
+    },
+
+    /**
+     * @deprecated - DO NOT USE: This method performs local count manipulation
+     * Use refreshMessageReactions() instead to get server-authoritative state
+     */
+    updateMessageReactions(messageId, emoji, action, userId) {
+        console.warn('updateMessageReactions is deprecated - use refreshMessageReactions for server-authoritative updates');
+        // Deprecated: Local manipulation causes count mismatches between users
+        // Always fetch from server instead
+        this.refreshMessageReactions(messageId);
     },
     
     /**

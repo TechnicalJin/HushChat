@@ -447,23 +447,45 @@ body {
 }
 
 .btn-send {
-    padding: 14px 24px;
+    padding: 12px;
+    min-width: 48px;
+    width: 48px;
+    height: 48px;
     background: var(--primary-color);
     color: white;
     border: none;
-    border-radius: 24px;
-    font-weight: 600;
+    border-radius: 50%;
     cursor: pointer;
     transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
-.btn-send:hover {
+.btn-send .send-icon {
+    width: 20px;
+    height: 20px;
+    transition: opacity 0.3s ease;
+}
+
+.btn-send:hover:not(:disabled) {
     background: #5558e3;
-    transform: translateY(-2px);
+    transform: scale(1.05);
 }
 
-.btn-send:active {
-    transform: translateY(0);
+.btn-send:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+.btn-send:disabled {
+    background: #374151;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.btn-send:disabled .send-icon {
+    opacity: 0.4;
 }
 
 .input-info {
@@ -822,6 +844,14 @@ body {
 
 .btn-send.btn-editing {
     background: var(--success-color);
+    width: auto;
+    min-width: 80px;
+    padding: 12px 24px;
+    border-radius: 24px;
+}
+
+.btn-send.btn-editing .send-icon {
+    display: none;
 }
 
 .btn-send.btn-editing:hover {
@@ -1546,25 +1576,17 @@ body {
         transition: height 0.15s ease;
     }
 
-    /* Send button - icon only on mobile */
+    /* Send button - mobile adjustments */
     .btn-send {
-        padding: 10px 14px;
+        padding: 10px;
         min-width: 44px;
-        border-radius: 50%;
         width: 44px;
         height: 44px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
     }
 
-    .btn-send span {
-        display: none;
-    }
-
-    .btn-send::after {
-        content: '➤';
-        font-size: 1.1rem;
+    .btn-send .send-icon {
+        width: 18px;
+        height: 18px;
     }
 
     /* === FIX 8: REPLY PREVIEW BAR MOBILE ===
@@ -1772,6 +1794,11 @@ body {
         height: 40px;
         min-width: 40px;
         padding: 8px;
+    }
+
+    .btn-send .send-icon {
+        width: 16px;
+        height: 16px;
     }
 
     .message-form textarea {
