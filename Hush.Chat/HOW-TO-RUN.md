@@ -12,7 +12,6 @@
    ```
    run-script.bat ||  []
    ```
-
 cd C:\Hush\Hush.Chat; cmd /c run-script.bat
 
 
