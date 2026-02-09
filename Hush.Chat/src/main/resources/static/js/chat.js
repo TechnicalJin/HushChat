@@ -555,8 +555,8 @@ const chat = {
                 // Clear reply state
                 this.cancelReply();
 
-                // Render the sent message immediately
-                this.renderMessage(response.data, true);
+                // NOTE: Message will be rendered via WebSocket echo (single source of truth)
+                // No optimistic render to prevent duplicate path
             } else {
                 throw new Error(response.error || 'Failed to send message');
             }
@@ -611,25 +611,8 @@ const chat = {
             const response = await api.uploadFile('/files/upload', formData);
 
             if (response.success) {
-                // Render as a file message
-                const data = response.data;
-                const message = {
-                    messageId: data.fileId,
-                    roomCode: data.roomCode,
-                    senderId: data.senderId,
-                    senderName: data.senderName,
-                    content: data.originalFilename,
-                    type: 'FILE',
-                    timestamp: data.uploadTime,
-                    expiryTime: data.expiryTime,
-                    edited: false,
-                    deleted: false,
-                    lastModified: data.uploadTime,
-                    downloadUrl: data.downloadUrl,
-                    fileSize: data.fileSize,
-                    contentType: data.contentType
-                };
-                this.renderMessage(message, true);
+                // NOTE: File message will be rendered via WebSocket echo
+                // No optimistic render to prevent duplicate path
                 if (progressEl) {
                     progressEl.textContent = 'Uploaded';
                 }
@@ -660,10 +643,14 @@ const chat = {
      * FIX 13: Implements welcome message fade-out on first message
      */
     renderMessage(message, isOwn = null) {
-        // Prevent duplicate messages
+        // DIAGNOSTIC LOG: Check if message already displayed
         if (this.displayedMessageIds.has(message.messageId)) {
+            // console.log(`🟠 MESSAGE ALREADY EXISTS: ${message.messageId} (not rendering)`);
             return;
         }
+        
+        // DIAGNOSTIC LOG: Message added to state
+        // console.log(`✅ MESSAGE ADDED TO STATE: ${message.messageId} | Sender: ${message.senderName || message.senderId}`);
         this.displayedMessageIds.add(message.messageId);
 
         // FIX 13: Fade out welcome message on first real message
@@ -876,6 +863,9 @@ const chat = {
             }
             this.scrollToBottom();
         }
+        
+        // DIAGNOSTIC LOG: Message fully rendered
+        console.log(`\ud83d\udcdd MESSAGE RENDERED TO DOM: ${message.messageId}`);
     },
 
     /**

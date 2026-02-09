@@ -229,6 +229,10 @@ const webSocketAdapter = {
             const body = message.body;
             const event = JSON.parse(body);
             
+            // DIAGNOSTIC LOG: WS message received
+            const messageId = event.messageId || event.message?.messageId;
+            // console.log(`🔵 WS MESSAGE RECEIVED: ${messageId} | Type: ${event.type || 'MESSAGE'}`);
+            
             console.debug('[WebSocket] Received event:', event.type || 'MESSAGE');
             
             // Route to EventProcessor for deduplication and UI update

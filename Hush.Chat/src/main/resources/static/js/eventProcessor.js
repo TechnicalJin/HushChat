@@ -56,12 +56,18 @@ const eventProcessor = {
 
         // Generate eventId if missing (backward compatibility)
         const eventId = this.getEventId(event);
+        const messageId = event.messageId || event.message?.messageId;
 
         // Check for duplicate
         if (this.isDuplicate(eventId)) {
+            // DIAGNOSTIC LOG: Event processor duplicate detection
+            // console.log(`🟡 EVENT PROCESSOR DUPLICATE: ${messageId} | eventId: ${eventId}`);
             console.debug('[EventProcessor] Duplicate event ignored:', eventId);
             return false;
         }
+
+        // DIAGNOSTIC LOG: Event processor accepted
+        // console.log(`🟢 EVENT PROCESSOR ACCEPTED: ${messageId} | eventId: ${eventId}`);
 
         // Mark as processed
         this.markProcessed(eventId);
