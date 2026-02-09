@@ -4,7 +4,6 @@ import com.code.HushChat.dto.FileUploadResponseDto;
 import com.code.HushChat.model.ApiResponse;
 import com.code.HushChat.model.FileMetadata;
 import com.code.HushChat.service.FileService;
-import com.code.HushChat.service.SessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +25,6 @@ import java.nio.charset.StandardCharsets;
 public class FileController {
 
     private final FileService fileService;
-    private final SessionService sessionService;
 
     /**
      * Upload a file and associate it with a room as a message attachment.
@@ -47,12 +45,11 @@ public class FileController {
             HttpServletRequest request,
             @RequestHeader(value = "Authorization", required = false) String authHeader
     ) {
-        // Optional: validate authenticated session if token provided
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String sessionToken = authHeader.substring(7);
-            sessionService.validateSession(sessionToken);
-        }
-
+        // FIX: Do NOT validate session here - endpoint is permitAll() in SecurityConfig
+        // The issue: sessionService checks InMemorySessionStore which is NOT synchronized with JWT tokens
+        // WebSocket authentication uses JwtTokenProvider, but this was checking TokenUtil sessions
+        // Since file uploads are public endpoints (no auth required), skip validation entirely
+        
         String normalizedRoomCode = roomCode.toUpperCase();
 
         try {

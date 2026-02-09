@@ -279,16 +279,61 @@ const eventProcessor = {
             return;
         }
 
-        // Use emojiSystem to render the updated reactions
-        if (typeof emojiSystem.renderReactions === 'function') {
-            emojiSystem.renderReactions(messageId, reactionCounts);
+        // Get current user ID for highlighting active reactions
+        const currentUserId = localStorage.getItem('userId');
+
+        // Use emojiSystem.renderMessageReactions (the method that actually exists)
+        if (typeof emojiSystem.renderMessageReactions === 'function') {
+            emojiSystem.renderMessageReactions(messageEl, reactionCounts, currentUserId);
         } else {
-            // Fallback: Update each reaction individually
-            for (const [emoji, count] of Object.entries(reactionCounts)) {
-                if (count > 0) {
-                    emojiSystem.updateMessageReactions(messageId, emoji, 'add', null);
-                }
+            // Fallback: Manual render
+            console.warn('[EventProcessor] renderMessageReactions not available, using manual render');
+            this.manualRenderReactions(messageEl, messageId, reactionCounts, currentUserId);
+        }
+    },
+
+    /**
+     * Manual fallback for rendering reactions when emojiSystem is unavailable
+     */
+    manualRenderReactions(messageEl, messageId, reactionCounts, currentUserId) {
+        let reactionsContainer = messageEl.querySelector('.message-reactions');
+        
+        // Remove empty reactions
+        if (!reactionCounts || Object.keys(reactionCounts).length === 0) {
+            if (reactionsContainer) {
+                reactionsContainer.style.display = 'none';
             }
+            return;
+        }
+
+        // Create container if it doesn't exist
+        if (!reactionsContainer) {
+            reactionsContainer = document.createElement('div');
+            reactionsContainer.className = 'message-reactions';
+            
+            const footer = messageEl.querySelector('.message-footer');
+            if (footer) {
+                footer.parentNode.insertBefore(reactionsContainer, footer);
+            } else {
+                messageEl.appendChild(reactionsContainer);
+            }
+        }
+
+        // Clear and rebuild
+        reactionsContainer.innerHTML = '';
+        reactionsContainer.style.display = '';
+
+        // Render each reaction
+        for (const [emoji, data] of Object.entries(reactionCounts)) {
+            const isActive = data.userIds && data.userIds.includes(currentUserId);
+            const badge = document.createElement('button');
+            badge.className = `reaction-badge${isActive ? ' active' : ''}`;
+            badge.dataset.emoji = emoji;
+            badge.innerHTML = `
+                <span class="reaction-emoji">${emoji}</span>
+                <span class="reaction-count">${data.count}</span>
+            `;
+            reactionsContainer.appendChild(badge);
         }
     },
 
