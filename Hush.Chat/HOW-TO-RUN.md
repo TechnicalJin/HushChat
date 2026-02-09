@@ -22,4 +22,4 @@ cd C:\Hush\Hush.Chat; cmd /c run-script.bat
 Press `Ctrl+C` in terminal
 
 PS C:\Hush\Hush.Chat>
-.\mvnw.cmd spring-boot:run
+cd C:\Hush\Hush.Chat; .\mvnw.cmd spring-boot:run
