@@ -34,13 +34,19 @@ const config = {
         CURRENT_ROOM: 'currentRoom',
         LAST_MESSAGE_TIME: 'lastMessageTime'
     },
-    
-    // WebSocket Configuration (WebSocket-only transport)
+
+    // WebSocket Configuration
     WEBSOCKET: {
-        ENABLED: true,                      // WebSocket is always enabled
+        ENABLED: true,                      // WebSocket enabled (Primary)
         ENDPOINT: '/ws',                    // WebSocket endpoint
         RECONNECT_ATTEMPTS: 3,              // Max reconnection attempts
         RECONNECT_DELAYS: [1000, 3000, 5000] // Backoff delays in ms
+    },
+
+    // Polling Configuration (Fallback)
+    POLLING: {
+        ENABLED: true,                      // Polling enabled (Fallback)
+        INTERVAL: 3000                      // 3 seconds
     }
 };
 

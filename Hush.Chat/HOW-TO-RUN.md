@@ -10,8 +10,12 @@
 
 2. Run the script:
    ```
-   run-script.bat ||  [cd C:\Hush\Hush.Chat; cmd /c run-script.bat]
+   run-script.bat ||  []
    ```
+
+cd C:\Hush\Hush.Chat; cmd /c run-script.bat
+
+
 3. Wait for application to start
 4. Access at: http://localhost:8080
 
