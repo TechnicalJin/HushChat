@@ -48,6 +48,10 @@ public class FileService {
     /**
      * Upload a file for a room and return metadata + download URL.
      */
+    public static String buildRelativeFileDownloadUrl(String fileId) {
+        return "/api/files/" + fileId + "/download";
+    }
+
     public FileUploadResponseDto uploadFile(String roomCode,
                                             String userId,
                                             String senderName,
@@ -140,7 +144,7 @@ public class FileService {
         messageStore.save(roomCode, message);
         roomService.updateRoomActivity(roomCode);
 
-        String downloadUrl = baseDownloadUrl + "/api/files/" + fileId + "/download";
+        String downloadUrl = buildRelativeFileDownloadUrl(fileId);
 
         log.info("File uploaded - id: {}, room: {}, user: {}, name: {}, size: {} bytes",
                 fileId, roomCode, userId, originalFilename, sizeBytes);

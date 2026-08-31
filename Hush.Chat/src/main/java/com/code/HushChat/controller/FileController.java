@@ -53,13 +53,12 @@ public class FileController {
         String normalizedRoomCode = roomCode.toUpperCase();
 
         try {
-            String baseUrl = getBaseUrl(request);
             FileUploadResponseDto dto = fileService.uploadFile(
                     normalizedRoomCode,
                     userId,
                     senderName,
                     file,
-                    baseUrl
+                    null
             );
 
             return ResponseEntity.ok(
@@ -104,19 +103,6 @@ public class FileController {
                 .body(resource);
     }
 
-    private String getBaseUrl(HttpServletRequest request) {
-        String scheme = request.getScheme();
-        String serverName = request.getServerName();
-        int serverPort = request.getServerPort();
-
-        StringBuilder url = new StringBuilder();
-        url.append(scheme).append("://").append(serverName);
-        if ((scheme.equals("http") && serverPort != 80) ||
-            (scheme.equals("https") && serverPort != 443)) {
-            url.append(":").append(serverPort);
-        }
-        return url.toString();
-    }
 }
 
 

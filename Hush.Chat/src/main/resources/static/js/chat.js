@@ -642,6 +642,24 @@ const chat = {
      * FIX 7: Implements message grouping for same-sender clusters
      * FIX 13: Implements welcome message fade-out on first message
      */
+    normalizeFileDownloadUrl(url) {
+        if (!url) return url;
+
+        try {
+            const parsed = new URL(url, window.location.origin);
+            const pathname = parsed.pathname || '/';
+            const search = parsed.search || '';
+
+            if (pathname.startsWith('/api/files/')) {
+                return `${pathname}${search}`;
+            }
+
+            return url;
+        } catch (error) {
+            return url;
+        }
+    },
+
     renderMessage(message, isOwn = null) {
         // DIAGNOSTIC LOG: Check if message already displayed
         if (this.displayedMessageIds.has(message.messageId)) {
@@ -741,7 +759,8 @@ const chat = {
         if (isFile) {
             const fileLabel = this.escapeHtml(message.content);
             const fileSizeLabel = message.fileSize ? ` (${formatFileSize(message.fileSize)})` : '';
-            const downloadUrl = message.downloadUrl || `${config.API_BASE_URL}/files/${message.fileId || message.messageId}/download`;
+            const fallbackDownloadUrl = `${config.API_BASE_URL}/files/${message.fileId || message.messageId}/download`;
+            const downloadUrl = this.normalizeFileDownloadUrl(message.downloadUrl || fallbackDownloadUrl);
             const isImage = /\.(png|jpe?g)$/i.test(message.content || '');
             const mediaBlock = isImage
                 ? `<div class="file-thumb"><img src="${downloadUrl}" alt="${fileLabel}"></div>`

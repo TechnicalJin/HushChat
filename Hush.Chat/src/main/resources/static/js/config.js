@@ -1,8 +1,8 @@
 // API Configuration
 // NOTE: Long polling support intentionally removed. WebSocket is the ONLY real-time transport.
 const config = {
-    // API Base URL - Update this for production
-    API_BASE_URL: 'http://localhost:8080/api',
+    // API Base URL. Keep relative so the app works on localhost, LAN, HTTPS, staging, and production.
+    API_BASE_URL: '/api',
 
     // Timeouts
     REQUEST_TIMEOUT: 30000, // 30 seconds
@@ -49,12 +49,6 @@ const config = {
         INTERVAL: 3000                      // 3 seconds
     }
 };
-
-// Environment detection
-if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    // Production - Update with your production API URL
-    config.API_BASE_URL = window.location.origin + '/api';
-}
 
 // Freeze config to prevent modifications
 Object.freeze(config);
