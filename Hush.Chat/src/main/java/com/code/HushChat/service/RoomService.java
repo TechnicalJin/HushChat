@@ -86,16 +86,20 @@ public class RoomService {
         }
 
         String requestedUserId = dto.getUserId();
-        if (requestedUserId != null && !requestedUserId.isBlank() && room.getActiveUserIds().contains(requestedUserId)) {
+        if (requestedUserId != null && !requestedUserId.isBlank() && room.isUserActive(requestedUserId)) {
             throw new AlreadyInRoomException("You are already a member of this room.");
         }
 
         String userId = (requestedUserId != null && !requestedUserId.isBlank())
             ? requestedUserId
             : UUID.randomUUID().toString();
-        
-        // Add user to room
-        boolean added = room.addUser(userId, dto.getUserName());
+
+        boolean added;
+        if (room.hasUserMembership(userId)) {
+            added = room.reactivateUser(userId, dto.getUserName());
+        } else {
+            added = room.addUser(userId, dto.getUserName());
+        }
         if (!added) {
             throw new UnauthorizedException("Failed to join room");
         }
@@ -117,26 +121,36 @@ public class RoomService {
      * Leave a chat room
      */
     public void leaveRoom(String roomCode, String userId) {
+        if (roomCode == null || userId == null || userId.isBlank()) {
+            return;
+        }
+
         ChatRoom room = roomStore.get(roomCode);
-        
         if (room == null) {
             return; // Room doesn't exist, nothing to do
         }
-        
-        room.removeUser(userId);
-        
-        // Remove user's join time tracking
-        roomStore.removeUserJoinTime(roomCode, userId);
-        
-        // If room is empty, delete it
-        if (room.getActiveUserIds().isEmpty()) {
-            roomStore.delete(roomCode);
-            log.info("Room deleted (empty) - Code: {}", roomCode);
-        } else {
-            room.updateActivity(appConfig.getRoom().getInactivityTimeoutMinutes());
-            roomStore.save(roomCode, room);
-            log.info("User left room - Code: {}, Remaining users: {}", 
-                roomCode, room.getActiveUserIds().size());
+
+        synchronized (room) {
+            if (!room.hasUserMembership(userId) || !room.isUserActive(userId)) {
+                return; // Idempotent: already inactive or already removed
+            }
+
+            boolean removed = room.removeUser(userId);
+            if (!removed) {
+                return;
+            }
+
+            roomStore.removeUserJoinTime(roomCode, userId);
+
+            if (room.getActiveUserIds().isEmpty()) {
+                roomStore.delete(roomCode);
+                log.info("Room deleted (empty) - Code: {}", roomCode);
+            } else {
+                room.updateActivity(appConfig.getRoom().getInactivityTimeoutMinutes());
+                roomStore.save(roomCode, room);
+                log.info("User left room - Code: {}, Remaining users: {}",
+                    roomCode, room.getActiveUserIds().size());
+            }
         }
     }
     
@@ -160,7 +174,7 @@ public class RoomService {
             .roomName(room.getRoomName())
             .currentUsers(room.getActiveUserIds().size())
             .maxUsers(room.getMaxUsers())
-            .userNames(Set.copyOf(room.getUserIdToName().values()))
+            .userNames(room.getUserNames())
             .createdAt(room.getCreatedAt())
             .lastActivity(room.getLastActivity())
             .build();

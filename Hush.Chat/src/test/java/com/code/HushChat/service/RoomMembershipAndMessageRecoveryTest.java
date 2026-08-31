@@ -58,6 +58,34 @@ class RoomMembershipAndMessageRecoveryTest {
     }
 
     @Test
+    void leaveRoom_isIdempotent_and_rejoin_reactivatesExistingMembership() {
+        String roomCode = "ABCDE";
+        String userId = "user-1";
+        String otherUserId = "user-2";
+
+        ChatRoom room = new ChatRoom(roomCode, "Room", userId, "Alice", 10, 30);
+        room.addUser(otherUserId, "Bob");
+        roomStore.save(roomCode, room);
+
+        roomService.leaveRoom(roomCode, userId);
+        assertFalse(roomStore.get(roomCode).isUserActive(userId));
+        assertTrue(roomStore.get(roomCode).isUserActive(otherUserId));
+
+        roomService.leaveRoom(roomCode, userId);
+        assertFalse(roomStore.get(roomCode).isUserActive(userId));
+        assertTrue(roomStore.get(roomCode).isUserActive(otherUserId));
+
+        JoinRoomDto rejoin = new JoinRoomDto();
+        rejoin.setRoomCode(roomCode);
+        rejoin.setUserName("Alice");
+        rejoin.setUserId(userId);
+
+        ChatRoom rejoined = roomService.joinRoom(rejoin);
+        assertTrue(rejoined.isUserActive(userId));
+        assertEquals(2, rejoined.getActiveUserIds().size());
+    }
+
+    @Test
     void getActiveMessages_returnsOnlyUnexpiredMessages() {
         String roomCode = "ABCDE";
         String userId = "user-1";

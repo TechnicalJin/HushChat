@@ -48,6 +48,7 @@ const chat = {
     // Presence tracking
     userPresenceMap: {},  // userId -> isActive
     activeUserCount: 0,
+    leaveRequestSent: false,
 
     /**
      * Initialize chat module
@@ -83,6 +84,7 @@ const chat = {
         this.setupScrollListener();
         this.setupReplyPreviewListeners();
         this.setupMobileViewportFix(); // FIX: Handle mobile viewport issues
+        this.setupPageLeaveHandler();
         this.startExpiryCountdownUpdater();
 
         // Initialize presence manager
@@ -171,6 +173,40 @@ const chat = {
         if (closeBtn) {
             closeBtn.addEventListener('click', () => this.cancelReply());
         }
+    },
+
+    setupPageLeaveHandler() {
+        const leaveRoom = () => {
+            if (this.leaveRequestSent || !this.roomCode || !this.userId) {
+                return;
+            }
+
+            this.leaveRequestSent = true;
+
+            const payload = JSON.stringify({ roomCode: this.roomCode, userId: this.userId });
+            const headers = { 'Content-Type': 'application/json' };
+
+            try {
+                if (navigator.sendBeacon) {
+                    const blob = new Blob([payload], { type: 'application/json' });
+                    navigator.sendBeacon('/api/rooms/leave', blob);
+                    return;
+                }
+
+                fetch('/api/rooms/leave', {
+                    method: 'POST',
+                    headers,
+                    body: payload,
+                    keepalive: true,
+                    credentials: 'same-origin'
+                }).catch(() => {});
+            } catch (error) {
+                console.warn('[Chat] Leave on navigation failed:', error);
+            }
+        };
+
+        window.addEventListener('pagehide', leaveRoom, { once: true });
+        window.addEventListener('beforeunload', leaveRoom, { once: true });
     },
 
     /**
@@ -2286,6 +2322,8 @@ const chat = {
             this.activeToast.remove();
             this.activeToast = null;
         }
+
+        this.leaveRequestSent = false;
 
         localStorage.removeItem('roomCode');
         localStorage.removeItem('roomName');
