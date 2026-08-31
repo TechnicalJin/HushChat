@@ -35,6 +35,13 @@ public class GlobalExceptionHandler {
             .status(HttpStatus.UNAUTHORIZED)
             .body(ApiResponse.error("Unauthorized", ex.getMessage()));
     }
+
+    @ExceptionHandler(AlreadyInRoomException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAlreadyInRoom(AlreadyInRoomException ex) {
+        return ResponseEntity
+            .status(HttpStatus.CONFLICT)
+            .body(ApiResponse.error("You are already a member of this room.", ex.getMessage()));
+    }
     
     @ExceptionHandler(FileSizeExceededException.class)
     public ResponseEntity<ApiResponse<Void>> handleFileSizeExceeded(FileSizeExceededException ex) {

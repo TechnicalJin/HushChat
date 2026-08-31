@@ -15,4 +15,6 @@ public class JoinRoomDto {
     @NotBlank(message = "User name is required")
     @Size(min = 2, max = 30, message = "User name must be between 2 and 30 characters")
     private String userName;
+
+    private String userId;
 }

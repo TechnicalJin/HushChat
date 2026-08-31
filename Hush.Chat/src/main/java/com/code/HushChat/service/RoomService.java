@@ -4,6 +4,7 @@ import com.code.HushChat.config.AppConfig;
 import com.code.HushChat.dto.CreateRoomDto;
 import com.code.HushChat.dto.JoinRoomDto;
 import com.code.HushChat.dto.RoomInfoDto;
+import com.code.HushChat.exception.AlreadyInRoomException;
 import com.code.HushChat.exception.RoomNotFoundException;
 import com.code.HushChat.exception.UnauthorizedException;
 import com.code.HushChat.model.ChatRoom;
@@ -83,9 +84,15 @@ public class RoomService {
         if (room.isFull()) {
             throw new UnauthorizedException("Room is full (max " + room.getMaxUsers() + " users)");
         }
-        
-        // Generate unique user ID for joining user
-        String userId = UUID.randomUUID().toString();
+
+        String requestedUserId = dto.getUserId();
+        if (requestedUserId != null && !requestedUserId.isBlank() && room.getActiveUserIds().contains(requestedUserId)) {
+            throw new AlreadyInRoomException("You are already a member of this room.");
+        }
+
+        String userId = (requestedUserId != null && !requestedUserId.isBlank())
+            ? requestedUserId
+            : UUID.randomUUID().toString();
         
         // Add user to room
         boolean added = room.addUser(userId, dto.getUserName());

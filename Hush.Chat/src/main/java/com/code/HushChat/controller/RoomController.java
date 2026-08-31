@@ -61,11 +61,13 @@ public class RoomController {
         
         ChatRoom room = roomService.joinRoom(dto);
         
-        // Find the user ID that was just added (last one in the set)
-        String userId = room.getActiveUserIds().stream()
-            .filter(id -> room.getUserIdToName().get(id).equals(dto.getUserName()))
-            .findFirst()
-            .orElse(null);
+        String userId = dto.getUserId();
+        if (userId == null || userId.isBlank()) {
+            userId = room.getActiveUserIds().stream()
+                .filter(id -> room.getUserIdToName().get(id).equals(dto.getUserName()))
+                .findFirst()
+                .orElse(null);
+        }
         
         // Generate JWT token for WebSocket authentication
         String token = jwtTokenProvider.generateToken(userId);

@@ -142,6 +142,34 @@ public class MessageService {
      * Get messages since a given timestamp, respecting user join time
      * Late joiners will NOT see messages sent before they joined
      */
+    public List<MessageResponseDto> getActiveMessages(String roomCode, String userId) {
+        ChatRoom room = roomStore.get(roomCode);
+        if (room == null) {
+            throw new RoomNotFoundException("Room not found: " + roomCode);
+        }
+
+        if (!room.getActiveUserIds().contains(userId)) {
+            throw new UnauthorizedException("User is not a member of this room");
+        }
+
+        List<ChatMessage> messages = messageStore.getMessages(roomCode);
+        if (messages == null || messages.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return messages.stream()
+                .filter(msg -> !msg.isExpired())
+                .sorted((a, b) -> a.getTimestamp().compareTo(b.getTimestamp()))
+                .map(msg -> {
+                    String senderName = room.getUserIdToName().get(msg.getUserId());
+                    if (senderName == null) {
+                        senderName = "Unknown";
+                    }
+                    return toMessageResponseDto(msg, senderName);
+                })
+                .collect(Collectors.toList());
+    }
+
     public List<MessageResponseDto> getMessagesSince(String roomCode, LocalDateTime sinceTimestamp, String userId) {
         // Validate room exists
         ChatRoom room = roomStore.get(roomCode);

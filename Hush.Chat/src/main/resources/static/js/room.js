@@ -61,7 +61,8 @@ document.getElementById('joinRoomForm').addEventListener('submit', async (e) => 
     try {
         const response = await api.post('/rooms/join', {
             roomCode: roomCode,
-            userName: userName
+            userName: userName,
+            userId: localStorage.getItem('userId') || null
         });
         
         if (response.success) {

@@ -178,6 +178,10 @@ const webSocketAdapter = {
         
         // Subscribe to room events
         this.subscribeToRoom();
+
+        if (typeof chat !== 'undefined' && typeof chat.loadActiveRoomMessages === 'function') {
+            chat.loadActiveRoomMessages();
+        }
         
         // Notify presence manager of connection
         if (typeof presenceManager !== 'undefined' && presenceManager.onConnectionChange) {

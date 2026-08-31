@@ -101,7 +101,10 @@ const chat = {
         // Initialize Transport (try WebSocket, fallback to Polling)
         if (typeof transportFactory !== 'undefined') {
             transportFactory.init(this.roomCode)
-                .then(type => console.log('Transport initialized:', type))
+                .then(type => {
+                    console.log('Transport initialized:', type);
+                    this.loadActiveRoomMessages();
+                })
                 .catch(err => console.error('Transport init failed:', err));
         }
 
@@ -1179,6 +1182,21 @@ const chat = {
     /**
      * Render multiple messages
      */
+    async loadActiveRoomMessages() {
+        if (!this.roomCode || !this.userId) {
+            return;
+        }
+
+        try {
+            const response = await api.get(`/messages/${this.roomCode}/active?userId=${encodeURIComponent(this.userId)}`);
+            if (response.success && Array.isArray(response.data?.messages)) {
+                this.renderMessages(response.data.messages);
+            }
+        } catch (error) {
+            console.warn('[Chat] Failed to restore active room messages:', error);
+        }
+    },
+
     renderMessages(messages) {
         messages.forEach(msg => {
             // Check if message already exists (for updates)

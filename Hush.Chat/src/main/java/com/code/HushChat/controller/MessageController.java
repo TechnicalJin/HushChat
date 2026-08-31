@@ -57,6 +57,24 @@ public class MessageController {
      * Get messages since a given timestamp
      * GET /api/messages/{roomCode}?since={timestamp}&userId={userId}
      */
+    @GetMapping("/{roomCode}/active")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getActiveMessages(
+            @PathVariable String roomCode,
+            @RequestParam String userId) {
+
+        roomCode = roomCode.toUpperCase();
+        List<MessageResponseDto> messages = messageService.getActiveMessages(roomCode, userId);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("messages", messages);
+        response.put("count", messages.size());
+        response.put("serverTime", LocalDateTime.now().format(FORMATTER));
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Active messages retrieved", response)
+        );
+    }
+
     @GetMapping("/{roomCode}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getMessages(
             @PathVariable String roomCode,
