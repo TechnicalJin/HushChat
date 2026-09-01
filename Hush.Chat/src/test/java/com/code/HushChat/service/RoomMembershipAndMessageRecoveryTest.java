@@ -7,6 +7,7 @@ import com.code.HushChat.model.ChatMessage;
 import com.code.HushChat.model.ChatRoom;
 import com.code.HushChat.storage.InMemoryMessageStore;
 import com.code.HushChat.storage.InMemoryRoomStore;
+import com.code.HushChat.util.RateLimiter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -34,7 +35,8 @@ class RoomMembershipAndMessageRecoveryTest {
                 roomStore,
                 roomService,
                 appConfig,
-                null
+                null,
+                new RateLimiter()
         );
     }
 

@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 
 @Service
@@ -55,9 +57,6 @@ public class OtpService {
             deviceId.substring(0, Math.min(8, deviceId.length())) + "...", 
             appConfig.getOtp().getExpiryMinutes());
         
-        // For development/testing, log the OTP (REMOVE IN PRODUCTION)
-        log.debug("🔐 OTP for {}: {}", deviceId, otp);
-        
         return session;
     }
     
@@ -84,8 +83,10 @@ public class OtpService {
                 "Maximum retry attempts exceeded. Please request a new OTP.");
         }
         
-        // Verify OTP
-        if (!session.getOtp().equals(otp)) {
+        // Verify OTP using a constant-time comparison to mitigate timing side-channels
+        if (!MessageDigest.isEqual(
+                session.getOtp().getBytes(StandardCharsets.UTF_8),
+                otp.getBytes(StandardCharsets.UTF_8))) {
             // Increment retry count
             session.setRetryCount(session.getRetryCount() + 1);
             otpStore.save(deviceId, session);

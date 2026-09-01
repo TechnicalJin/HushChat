@@ -16,7 +16,7 @@ import java.security.Principal;
  * - This class wraps userId as a Principal for STOMP session identification
  * 
  * Usage:
- * - Created during WebSocket handshake by CustomHandshakeHandler
+ * - Created during STOMP CONNECT authentication by StompConnectAuthInterceptor
  * - Stored in WebSocket session and accessible via StompHeaderAccessor
  * - Used by Spring's UserDestinationMessageHandler for message routing
  * 

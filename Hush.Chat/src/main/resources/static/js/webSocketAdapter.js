@@ -84,7 +84,7 @@ const webSocketAdapter = {
             this.connecting = true;
             
             try {
-                // Build WebSocket URL with JWT token
+                // Build WebSocket URL (no JWT in URL - sent via STOMP CONNECT header)
                 const wsUrl = this.buildWebSocketUrl();
                 console.log('[WebSocket] Connecting to:', wsUrl);
                 
@@ -99,6 +99,10 @@ const webSocketAdapter = {
                         reconnectDelay: 0, // We handle reconnection manually
                         heartbeatIncoming: this.HEARTBEAT_INCOMING,
                         heartbeatOutgoing: this.HEARTBEAT_OUTGOING,
+                        // Send JWT via STOMP CONNECT header (never in the URL)
+                        connectHeaders: {
+                            Authorization: `Bearer ${this.token}`
+                        },
                         debug: (str) => {
                             if (str.includes('ERROR') || str.includes('DISCONNECT')) {
                                 console.warn('[WebSocket] STOMP:', str);
@@ -127,7 +131,9 @@ const webSocketAdapter = {
                     this.stompClient = Stomp.over(socket);
                     this.stompClient.debug = null; // Disable verbose logging
                     
-                    this.stompClient.connect({}, 
+                    this.stompClient.connect({
+                        Authorization: `Bearer ${this.token}`
+                    }, 
                         (frame) => {
                             this.onConnected(frame);
                             resolve(true);
@@ -153,7 +159,11 @@ const webSocketAdapter = {
     },
     
     /**
-     * Build WebSocket URL with JWT token.
+     * Build WebSocket URL.
+     *
+     * NOTE: The JWT is NOT placed in the URL. It is sent via the
+     * STOMP CONNECT Authorization header to avoid leaking the token
+     * into logs, browser history, and Referer headers.
      * 
      * @returns {string} - Full WebSocket URL
      */
@@ -161,8 +171,8 @@ const webSocketAdapter = {
         const baseUrl = window.location.origin;
         const endpoint = this.WEBSOCKET_ENDPOINT;
         
-        // Append JWT token as query parameter (required by backend)
-        return `${baseUrl}${endpoint}?token=${encodeURIComponent(this.token)}`;
+        // No token in the URL - JWT is sent via STOMP CONNECT Authorization header
+        return `${baseUrl}${endpoint}`;
     },
     
     /**

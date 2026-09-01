@@ -4,6 +4,7 @@ import com.code.HushChat.config.AppConfig;
 import com.code.HushChat.dto.MessageResponseDto;
 import com.code.HushChat.dto.WebSocketEventDto;
 import com.code.HushChat.dto.SendMessageDto;
+import com.code.HushChat.exception.RateLimitExceededException;
 import com.code.HushChat.exception.RoomNotFoundException;
 import com.code.HushChat.exception.UnauthorizedException;
 import com.code.HushChat.model.ChatMessage;
@@ -13,6 +14,7 @@ import com.code.HushChat.model.event.RealtimeEvent;
 import com.code.HushChat.realtime.RealtimeDispatcher;
 import com.code.HushChat.storage.InMemoryMessageStore;
 import com.code.HushChat.storage.InMemoryRoomStore;
+import com.code.HushChat.util.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,7 @@ public class MessageService {
     private final RoomService roomService;
     private final AppConfig appConfig;
     private final RealtimeDispatcher realtimeDispatcher;
+    private final RateLimiter rateLimiter;
     
     // Maximum preview text length for replies
     private static final int MAX_PREVIEW_LENGTH = 100;
@@ -61,6 +64,12 @@ public class MessageService {
         // Validate user is in room
         if (!room.getActiveUserIds().contains(userId)) {
             throw new UnauthorizedException("User is not a member of this room");
+        }
+        
+        // Enforce per-user message rate limit
+        if (!rateLimiter.isMessageAllowed(userId, appConfig.getRateLimit().getMessagesPerMinute())) {
+            throw new RateLimitExceededException(
+                "Message rate limit exceeded. Please try again later.");
         }
         
         // Get sender name
