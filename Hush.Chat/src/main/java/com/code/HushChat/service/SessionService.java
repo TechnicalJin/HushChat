@@ -3,9 +3,9 @@ package com.code.HushChat.service;
 import com.code.HushChat.config.AppConfig;
 import com.code.HushChat.exception.UnauthorizedException;
 import com.code.HushChat.model.UserSession;
+import com.code.HushChat.security.JwtTokenProvider;
 import com.code.HushChat.storage.InMemorySessionStore;
 import com.code.HushChat.util.CodeGenerator;
-import com.code.HushChat.util.TokenUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 public class SessionService {
     
     private final InMemorySessionStore sessionStore;
-    private final TokenUtil tokenUtil;
+    private final JwtTokenProvider jwtTokenProvider;
     private final AppConfig appConfig;
     
     /**
@@ -32,8 +32,8 @@ public class SessionService {
         LocalDateTime expiryTime = LocalDateTime.now()
             .plusHours(appConfig.getSession().getExpiryHours());
         
-        // Generate JWT token
-        String sessionToken = tokenUtil.generateToken(userId, deviceId, expiryTime);
+        // Generate canonical JWT token via JwtTokenProvider (unified JWT impl)
+        String sessionToken = jwtTokenProvider.generateToken(userId, deviceId, expiryTime);
         
         // Create session
         UserSession session = UserSession.builder()
@@ -75,9 +75,19 @@ public class SessionService {
             throw new UnauthorizedException("Session has expired. Please login again.");
         }
         
-        // Validate token integrity
+        // Validate token integrity (canonical JwtTokenProvider)
         try {
-            tokenUtil.validateToken(sessionToken);
+            jwtTokenProvider.validateToken(sessionToken);
+
+            // Cross-check the userId embedded in the JWT (subject) against the
+            // stored session so the identity claim is always consistent.
+            String jwtUserId = jwtTokenProvider.getUserIdFromToken(sessionToken);
+            if (jwtUserId == null || !jwtUserId.equals(session.getUserId())) {
+                sessionStore.delete(sessionToken);
+                throw new UnauthorizedException("Session token identity mismatch. Please login again.");
+            }
+        } catch (UnauthorizedException e) {
+            throw e;
         } catch (Exception e) {
             sessionStore.delete(sessionToken);
             throw new UnauthorizedException("Invalid session token. Please login again.");
