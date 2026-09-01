@@ -27,6 +27,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -360,6 +361,79 @@ class SecurityConfigTest {
         }
     }
 
+// =======================================================================
+    // SECURITY FIX #9C — Security response headers
+    // =======================================================================
+
+    /** Every response must carry HSTS (HTTPS-only) enforcement headers. */
+    @Test
+    void httpStrictTransportSecurityHeaderIsPresent() throws Exception {
+        mockMvc.perform(get("/").secure(true))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Strict-Transport-Security",
+                        org.hamcrest.Matchers.allOf(
+                                org.hamcrest.Matchers.containsString("max-age=31536000"),
+                                org.hamcrest.Matchers.containsString("includeSubDomains"),
+                                org.hamcrest.Matchers.containsString("preload"))));
+    }
+
+    /** Every response must enforce a restrictive Content-Security-Policy. */
+    @Test
+    void contentSecurityPolicyHeaderIsPresent() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Security-Policy",
+                        org.hamcrest.Matchers.containsString("default-src 'self'")));
+    }
+
+    /** X-Content-Type-Options: nosniff must prevent MIME sniffing. */
+    @Test
+    void xContentTypeOptionsHeaderIsNoSniff() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"));
+    }
+
+    /** X-Frame-Options: DENY must block clickjacking. */
+    @Test
+    void xFrameOptionsHeaderDeniesEmbedding() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Frame-Options", "DENY"));
+    }
+
+    /** Referrer-Policy must restrict what is leaked via the Referer header. */
+    @Test
+    void referrerPolicyHeaderRestrictsRefererLeakage() throws Exception {
+        mockMvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Referrer-Policy",
+                        "strict-origin-when-cross-origin"));
+    }
+
+    // =======================================================================
+    // SECURITY FIX #9D — Actuator endpoint protection
+    // =======================================================================
+
+    /** /actuator/health remains publicly reachable (for load balancers). */
+    @Test
+    void actuatorHealthIsPubliclyAccessible() throws Exception {
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().is(HttpStatus.OK.value()));
+    }
+
+    /** Sensitive actuator endpoints (env, configprops, etc.) require auth. */
+    @Test
+    void sensitiveActuatorEndpointsRequireAuthentication() throws Exception {
+        mockMvc.perform(get("/actuator/env"))
+                .andExpect(status().is(HttpStatus.UNAUTHORIZED.value()));
+        mockMvc.perform(get("/actuator/configprops"))
+                .andExpect(status().is(HttpStatus.UNAUTHORIZED.value()));
+        mockMvc.perform(get("/actuator/metrics"))
+                .andExpect(status().is(HttpStatus.UNAUTHORIZED.value()));
+        mockMvc.perform(get("/actuator/beans"))
+                .andExpect(status().is(HttpStatus.UNAUTHORIZED.value()));
+    }
     // =======================================================================
     // SECURITY FIX #7 — Default Spring Security user is not used
     // =======================================================================

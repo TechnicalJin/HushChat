@@ -1,6 +1,7 @@
 package com.code.HushChat.exception;
 
 import com.code.HushChat.model.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -13,6 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
     
     @ExceptionHandler(InvalidOtpException.class)
@@ -26,35 +28,35 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleRoomNotFound(RoomNotFoundException ex) {
         return ResponseEntity
             .status(HttpStatus.NOT_FOUND)
-            .body(ApiResponse.error("Room not found", ex.getMessage()));
+            .body(ApiResponse.error("Room not found"));
     }
     
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnauthorized(UnauthorizedException ex) {
         return ResponseEntity
             .status(HttpStatus.UNAUTHORIZED)
-            .body(ApiResponse.error("Unauthorized", ex.getMessage()));
+            .body(ApiResponse.error("Unauthorized"));
     }
 
     @ExceptionHandler(AlreadyInRoomException.class)
     public ResponseEntity<ApiResponse<Void>> handleAlreadyInRoom(AlreadyInRoomException ex) {
         return ResponseEntity
             .status(HttpStatus.CONFLICT)
-            .body(ApiResponse.error("You are already a member of this room.", ex.getMessage()));
+            .body(ApiResponse.error("You are already a member of this room."));
     }
     
     @ExceptionHandler(FileSizeExceededException.class)
     public ResponseEntity<ApiResponse<Void>> handleFileSizeExceeded(FileSizeExceededException ex) {
         return ResponseEntity
             .status(HttpStatus.PAYLOAD_TOO_LARGE)
-            .body(ApiResponse.error("File too large", ex.getMessage()));
+            .body(ApiResponse.error("File too large"));
     }
 
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ApiResponse<Void>> handleRateLimitExceeded(RateLimitExceededException ex) {
         return ResponseEntity
             .status(HttpStatus.TOO_MANY_REQUESTS)
-            .body(ApiResponse.error("Rate limit exceeded", ex.getMessage()));
+            .body(ApiResponse.error("Rate limit exceeded"));
     }
     
     @ExceptionHandler(MaxUploadSizeExceededException.class)
@@ -86,16 +88,20 @@ public class GlobalExceptionHandler {
     
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
+        // SECURITY FIX #9E: Sanitize error message. IllegalArgumentException messages
+        // can leak internal details (file paths, config values, etc.). Return a
+        // generic message to the client while logging the full detail server-side.
+        log.warn("Rejected invalid request: {}", ex.getMessage());
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
-            .body(ApiResponse.error("Invalid request", ex.getMessage()));
+            .body(ApiResponse.error("Invalid request"));
     }
     
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGenericException(Exception ex) {
-        // Log the exception (without sensitive data)
-        System.err.println("Unexpected error: " + ex.getClass().getName());
-        
+        // SECURITY FIX #9E: Do not leak exception details/stack traces to the client.
+        // Log the full exception server-side, return a generic message.
+        log.error("Unexpected error", ex);
         return ResponseEntity
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(ApiResponse.error("An unexpected error occurred"));

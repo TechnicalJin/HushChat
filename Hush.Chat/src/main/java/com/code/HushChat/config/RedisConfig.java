@@ -1,50 +1,21 @@
 package com.code.HushChat.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import jakarta.annotation.PostConstruct;
 
 /**
  * Redis Configuration for Spring Boot application.
- * 
+ *
  * <p>This configuration sets up Redis connection and RedisTemplate for interacting
  * with Redis running in Docker container on localhost:6379.</p>
- * 
- * <p>Docker Commands:
- * <pre>
- * Start Redis:
- *   docker-compose up -d redis
- * 
- * Stop Redis:
- *   docker-compose stop redis
- * 
- * View Logs:
- *   docker-compose logs -f redis
- * 
- * Connect to CLI:
- *   docker exec -it chat-redis redis-cli
- * 
- * Check Keys:
- *   docker exec -it chat-redis redis-cli KEYS "room:code:*"
- * 
- * Monitor Commands:
- *   docker exec -it chat-redis redis-cli MONITOR
- * 
- * Clear All Data:
- *   docker exec -it chat-redis redis-cli FLUSHDB
- * </pre>
- * </p>
- * 
+ *
  * @author Hush Chat Development Team
  * @since 3.0
  */
@@ -54,53 +25,50 @@ import jakarta.annotation.PostConstruct;
 public class RedisConfig {
 
     /**
-     * Configure RedisTemplate with proper serialization.
-     * 
-     * <p>Configuration:
+     * Configure RedisTemplate with String-only serialization.
+     *
+     * <p>SECURITY FIX #9F: Replaced GenericJackson2JsonRedisSerializer with
+     * StringRedisSerializer for values to eliminate the deserialization
+     * attack vector (potential RCE via polymorphic type handling). All Redis
+     * values in this application are plain strings (room codes, user IDs),
+     * so JSON serialization is unnecessary.</p>
+     *
+     * <p>Configuration:</p>
      * <ul>
      *   <li>Key Serializer: StringRedisSerializer (stores keys as strings)</li>
-     *   <li>Value Serializer: GenericJackson2JsonRedisSerializer (stores values as JSON)</li>
+     *   <li>Value Serializer: StringRedisSerializer (stores values as strings)</li>
      *   <li>Hash Key/Value Serializers: Same as above</li>
      *   <li>Transaction Support: Enabled</li>
      * </ul>
-     * </p>
-     * 
+     *
      * @param connectionFactory Redis connection factory (auto-configured by Spring Boot)
      * @return configured RedisTemplate
      */
     @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
         log.info("Configuring RedisTemplate for Docker Redis connection...");
-        
+
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // Configure ObjectMapper for JSON serialization
-        ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new JavaTimeModule());
-        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
-        // String serializer for keys
+        // SECURITY FIX #9F: Use StringRedisSerializer for both keys and values.
+        // This eliminates the GenericJackson2JsonRedisSerializer deserialization risk.
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
-        
-        // JSON serializer for values
-        GenericJackson2JsonRedisSerializer jsonSerializer = 
-            new GenericJackson2JsonRedisSerializer(objectMapper);
 
         // Set key serializers
         template.setKeySerializer(stringSerializer);
         template.setHashKeySerializer(stringSerializer);
 
-        // Set value serializers
-        template.setValueSerializer(jsonSerializer);
-        template.setHashValueSerializer(jsonSerializer);
+        // Set value serializers (String only, no JSON deserialization attack surface)
+        template.setValueSerializer(stringSerializer);
+        template.setHashValueSerializer(stringSerializer);
 
         // Enable transaction support
         template.setEnableTransactionSupport(true);
 
         template.afterPropertiesSet();
-        
-        log.info("RedisTemplate configured successfully");
+
+        log.info("RedisTemplate configured successfully (String serializer)");
         return template;
     }
 
@@ -114,9 +82,7 @@ public class RedisConfig {
             log.info("Testing Redis connection to Docker container...");
             log.info("Redis connection successful! Docker container is running on localhost:6379");
         } catch (Exception e) {
-            log.error("╔════════════════════════════════════════════════════════════════╗");
-            log.error("║  REDIS CONNECTION FAILED - Docker container not running!      ║");
-            log.error("╚════════════════════════════════════════════════════════════════╝");
+            log.error("REDIS CONNECTION FAILED - Docker container not running!");
             log.error("");
             log.error("To fix this issue, start Redis using Docker:");
             log.error("  1. docker-compose up -d redis");

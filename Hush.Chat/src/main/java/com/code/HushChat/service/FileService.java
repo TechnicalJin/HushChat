@@ -82,6 +82,12 @@ public class FileService {
         String originalFilename = file.getOriginalFilename();
         long sizeBytes = file.getSize();
 
+        // SECURITY FIX #9B: Reject dangerous executable extensions first
+        if (FileUtil.isDangerousExtension(originalFilename)) {
+            throw new IllegalArgumentException(
+                "Executable file type is not allowed for upload");
+        }
+
         // Validate size
         long maxSizeBytes = appConfig.getFile().getMaxSizeMb() * 1024L * 1024L;
         if (sizeBytes > maxSizeBytes) {
@@ -94,16 +100,35 @@ public class FileService {
             throw new IllegalArgumentException("File type is not allowed");
         }
 
+        // SECURITY FIX #9B: Validate MIME type consistency with extension
+        String declaredContentType = file.getContentType();
+        if (declaredContentType != null && !declaredContentType.isBlank()
+                && !FileUtil.isMimeTypeConsistent(originalFilename, declaredContentType)) {
+            log.warn("MIME type mismatch for upload: filename='{}', declaredContentType='{}'",
+                    originalFilename, declaredContentType);
+            throw new IllegalArgumentException(
+                "File content type does not match the file extension");
+        }
+
+        // SECURITY FIX #9B: Sanitize the filename (path traversal, null bytes, etc.)
+        String safeOriginal = FileUtil.sanitizeFilename(originalFilename);
+
         // Ensure upload directory exists
         String uploadDir = appConfig.getFile().getUploadDir();
         FileUtil.createDirectoryIfNotExists(uploadDir);
 
         // Generate stored filename and path
         String fileId = UUID.randomUUID().toString();
-        String safeOriginal = FileUtil.sanitizeFilename(originalFilename);
         String storedFilename = fileId + "_" + safeOriginal;
 
         Path targetPath = Paths.get(uploadDir).resolve(storedFilename).toAbsolutePath();
+
+        // SECURITY FIX #9B: Ensure resolved path stays within upload directory
+        Path uploadDirPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+        if (!targetPath.startsWith(uploadDirPath)) {
+            throw new IllegalArgumentException("Invalid file path");
+        }
+
         Files.copy(file.getInputStream(), targetPath);
 
         LocalDateTime uploadTime = LocalDateTime.now();
