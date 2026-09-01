@@ -50,14 +50,20 @@ public class SecurityConfig {
      *   <li>POST /api/rooms/join - Join room</li>
      *   <li>GET /actuator/health - Health check endpoint</li>
      *   <li>/ws/** - WebSocket endpoints</li>
+     *   <li>/ and /index.html - Public frontend entry point</li>
+     *   <li>/chat.html, /otp.html - Frontend pages</li>
+     *   <li>/css/**, /js/** - Public static frontend resources</li>
      * </ul>
      * </p>
      * 
      * <p>Protected endpoints (authentication required):
      * <ul>
      *   <li>All other /api/** endpoints</li>
+     *   <li>/api/dev/** - Dev tools (no longer public)</li>
      * </ul>
      * </p>
+     * 
+     * <p>Default: deny-by-default for any request not matched above.</p>
      * 
      * @param http the HttpSecurity to configure
      * @return the configured SecurityFilterChain
@@ -94,13 +100,17 @@ public class SecurityConfig {
                 .requestMatchers("/api/reactions/**").permitAll()  // Emoji reactions
                 .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/ws/**").permitAll()
-                .requestMatchers("/api/dev/**").permitAll()        // Development endpoints
+                
+                // Public static frontend resources (Spring Boot serves these from classpath:/static/)
+                .requestMatchers("/", "/index.html", "/chat.html", "/otp.html").permitAll()
+                .requestMatchers("/css/**").permitAll()
+                .requestMatchers("/js/**").permitAll()
                 
                 // All other /api/** endpoints require authentication
                 .requestMatchers("/api/**").authenticated()
                 
-                // Allow all other requests (static resources, etc.)
-                .anyRequest().permitAll()
+                // Deny-by-default: any request not matched above is rejected
+                .anyRequest().denyAll()
             )
             
             // Configure exception handling

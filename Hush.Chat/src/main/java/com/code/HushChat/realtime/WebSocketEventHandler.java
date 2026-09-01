@@ -65,7 +65,7 @@ public class WebSocketEventHandler {
     private static final Pattern ROOM_QUEUE_PATTERN = Pattern.compile(".*queue/room/([A-Z0-9]+)");
     
     /**
-     * Session attribute key for userId (set by WebSocketAuthInterceptor).
+     * Session attribute key for userId (set by StompConnectAuthInterceptor during STOMP CONNECT).
      */
     private static final String USER_ID_ATTRIBUTE = "userId";
     
@@ -195,20 +195,29 @@ public class WebSocketEventHandler {
     }
     
     /**
-     * Extract userId from session attributes.
-     * 
-     * userId is set by WebSocketAuthInterceptor during handshake.
-     * 
+     * Extract userId from the STOMP session.
+     *
+     * The userId is established as the Principal name during STOMP CONNECT
+     * authentication (see {@link StompConnectAuthInterceptor}). As a fallback
+     * for backward compatibility, the session attribute (used by the previous
+     * handshake-based authentication) is checked as well.
+     *
      * @param headerAccessor STOMP header accessor
      * @return userId, or null if not found
      */
     private String getUserIdFromSession(StompHeaderAccessor headerAccessor) {
+        // Primary source: the authenticated Principal (name == userId)
+        if (headerAccessor.getUser() != null) {
+            return headerAccessor.getUser().getName();
+        }
+
+        // Fallback: session attribute previously populated by handshake auth
         Map<String, Object> sessionAttributes = headerAccessor.getSessionAttributes();
-        
+
         if (sessionAttributes == null) {
             return null;
         }
-        
+
         Object userId = sessionAttributes.get(USER_ID_ATTRIBUTE);
         return userId != null ? userId.toString() : null;
     }

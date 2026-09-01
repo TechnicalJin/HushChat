@@ -101,6 +101,19 @@ Development defaults are stored in `Hush.Chat/src/main/resources/application.pro
 - Upload directory: `Hush.Chat/uploads/`
 - Maximum upload size: `200 MB`
 
+For local development, the application no longer ships default database credentials.
+Before starting the backend, supply the database connection through environment
+variables. `DB_URL` is optional (defaults to `localhost:3306/chatdb`), but
+`DB_USERNAME` and `DB_PASSWORD` are required to connect to MySQL:
+
+```powershell
+cd Hush.Chat
+$env:DB_URL = "jdbc:mysql://localhost:3306/chatdb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+$env:DB_USERNAME = "your-local-db-user"
+$env:DB_PASSWORD = "your-local-db-password"
+.\mvnw.cmd spring-boot:run
+```
+
 For production, activate the `prod` profile and provide environment variables for secrets and infrastructure credentials:
 
 ```powershell

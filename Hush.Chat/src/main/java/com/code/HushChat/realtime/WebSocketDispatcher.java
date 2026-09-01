@@ -111,8 +111,8 @@ public class WebSocketDispatcher implements RealtimeDispatcher {
             int sentCount = 0;
             for (String userId : recipients) {
                 try {
-                    // CRITICAL: This requires CustomHandshakeHandler to set StompPrincipal(userId)
-                    // Spring STOMP will route to sessions where Principal.getName() == userId
+                    // CRITICAL: StompConnectAuthInterceptor sets StompPrincipal(userId) during
+                    // STOMP CONNECT; Spring STOMP routes to sessions where Principal.getName() == userId
                     messagingTemplate.convertAndSendToUser(userId, "/queue/room/" + roomCode, payload);
                     sentCount++;
                     log.debug("WebSocket message sent to userId={} at /user/{}/queue/room/{}", 

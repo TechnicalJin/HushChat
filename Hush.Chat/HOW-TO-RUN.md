@@ -23,3 +23,8 @@ Press `Ctrl+C` in terminal
 
 PS C:\Hush\Hush.Chat>
 cd C:\Hush\Hush.Chat; .\mvnw.cmd spring-boot:run
+
+
+$env:DB_USERNAME="root"
+$env:DB_PASSWORD="root"
+$env:DB_URL="jdbc:mysql://localhost:3306/chatdb?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
