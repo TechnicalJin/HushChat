@@ -360,6 +360,40 @@ class SecurityConfigTest {
         }
     }
 
+    // =======================================================================
+    // SECURITY FIX #7 — Default Spring Security user is not used
+    // =======================================================================
+
+    /** HTTP Basic authentication is disabled; even with valid credentials the
+     *  request is rejected (401) rather than processed through Basic auth. */
+    @Test
+    void httpBasicAuthenticationIsDisabled() throws Exception {
+        // Perform a Base64-encoded "user:password" Basic auth header request.
+        // Because SecurityConfig disables httpBasic(), the server must NOT
+        // authenticate via the Spring default user — it should reject the
+        // request because no Bearer JWT is present.
+        String credentials = java.util.Base64.getEncoder()
+                .encodeToString("user:password".getBytes());
+        mockMvc.perform(get("/api/messages/ANY-ROOM")
+                        .header("Authorization", "Basic " + credentials))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /** Form login is disabled; posting to a /login endpoint is not
+     *  processed through form authentication. The unauthenticated request
+     *  falls to deny-by-default and is rejected (401 Unauthorized). */
+    @Test
+    void formLoginIsDisabled() throws Exception {
+        mockMvc.perform(post("/login")
+                        .param("username", "admin")
+                        .param("password", "secret"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // =======================================================================
+    // SECURITY FIX #7 — File download authorization
+    // =======================================================================
+
     /** A former (left) member is forbidden from downloading a room's file. */
     @Test
     @WithMockUser("former-member")
