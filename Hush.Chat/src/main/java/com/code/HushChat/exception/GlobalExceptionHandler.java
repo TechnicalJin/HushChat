@@ -49,6 +49,13 @@ public class GlobalExceptionHandler {
             .status(HttpStatus.PAYLOAD_TOO_LARGE)
             .body(ApiResponse.error("File too large", ex.getMessage()));
     }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleRateLimitExceeded(RateLimitExceededException ex) {
+        return ResponseEntity
+            .status(HttpStatus.TOO_MANY_REQUESTS)
+            .body(ApiResponse.error("Rate limit exceeded", ex.getMessage()));
+    }
     
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
