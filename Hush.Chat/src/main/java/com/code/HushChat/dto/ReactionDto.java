@@ -21,7 +21,9 @@ public class ReactionDto {
     @NotBlank(message = "Message ID is required")
     private String messageId;
     
-    @NotBlank(message = "User ID is required")
+    // userId is no longer accepted from the client — the server derives it
+    // from the JWT principal. The field is kept for backwards-compatible
+    // serialization only.
     private String userId;
     
     @NotBlank(message = "Emoji is required")

@@ -95,9 +95,15 @@ public class SecurityConfig {
                 .requestMatchers("/api/rooms/join").permitAll()
                 .requestMatchers("/api/rooms/leave").permitAll()   // Leave room
                 .requestMatchers("/api/rooms/*/info").permitAll()  // Room info
-                .requestMatchers("/api/messages/**").permitAll()   // All message endpoints
-                .requestMatchers("/api/files/**").permitAll()      // File upload/download
-                .requestMatchers("/api/reactions/**").permitAll()  // Emoji reactions
+                .requestMatchers("/api/rooms/*/exists").permitAll() // Room exists check
+                
+                // Reaction defaults are public (no auth needed for static emoji list)
+                .requestMatchers("/api/reactions/defaults").permitAll()
+                
+                // Message, file, and reaction mutation/query endpoints require authentication
+                .requestMatchers("/api/messages/**").authenticated()
+                .requestMatchers("/api/files/**").authenticated()
+                .requestMatchers("/api/reactions/**").authenticated()
                 .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/ws/**").permitAll()
                 

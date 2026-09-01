@@ -125,7 +125,7 @@
             const response = await api.post('/auth/verify-otp', {
                 deviceId: deviceId,
                 otp: otpCode
-            });
+            }, false);
 
             if (response.success) {
                 // Store session token
@@ -154,7 +154,7 @@
         btn.textContent = 'Requesting...';
 
         try {
-            await api.post('/auth/request-otp', { deviceId });
+            await api.post('/auth/request-otp', { deviceId }, false);
             showSuccess('New OTP sent successfully!');
 
             // Reset countdown

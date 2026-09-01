@@ -566,9 +566,9 @@ const chat = {
 
         try {
             // Build request payload with optional reply metadata
+            // NOTE: userId is no longer sent — server derives it from JWT principal
             const payload = {
                 roomCode: this.roomCode,
-                userId: this.userId,
                 content: content
             };
 
@@ -583,7 +583,7 @@ const chat = {
                 };
             }
 
-            const response = await api.post('/messages/send', payload, false);
+            const response = await api.post('/messages/send', payload);
 
             if (response.success) {
                 // Clear input and reset height
@@ -643,8 +643,6 @@ const chat = {
         try {
             const formData = new FormData();
             formData.append('roomCode', this.roomCode);
-            formData.append('userId', this.userId);
-            formData.append('senderName', this.userName);
             formData.append('file', file);
 
             const response = await api.uploadFile('/files/upload', formData);
@@ -673,6 +671,35 @@ const chat = {
                     statusEl.style.display = 'none';
                 }, 1500);
             }
+        }
+    },
+
+    /**
+     * Download a file using authenticated fetch+blob.
+     * @param {string} authUrl - the API download URL
+     * @param {string} fileName - file name to save as
+     * @param {boolean} openImage - if true, open an image preview rather than download
+     */
+    async downloadFileWithAuth(authUrl, fileName, openImage) {
+        if (!authUrl) return;
+        try {
+            const response = await api.download(authUrl);
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            if (openImage) {
+                this.openImagePreview(objectUrl);
+                return;
+            }
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = fileName || 'download';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        } catch (error) {
+            console.error('Failed to download file:', error);
+            this.showError(error.message || 'Failed to download file.');
         }
     },
 
@@ -802,13 +829,13 @@ const chat = {
             const downloadUrl = this.normalizeFileDownloadUrl(message.downloadUrl || fallbackDownloadUrl);
             const isImage = /\.(png|jpe?g)$/i.test(message.content || '');
             const mediaBlock = isImage
-                ? `<div class="file-thumb"><img src="${downloadUrl}" alt="${fileLabel}"></div>`
+                ? `<div class="file-thumb"><img data-auth-url="${downloadUrl}" alt="${fileLabel}" style="cursor:pointer"></div>`
                 : `<div class="file-icon">📎</div>`;
             bodyHtml = `
                 <div id="${contentId}" class="${contentClasses} file-message-content">
                     ${mediaBlock}
                     <div class="file-info">
-                        <a href="${downloadUrl}" class="file-name" data-file-type="${isImage ? 'image' : 'file'}">
+                        <a href="#" class="file-name" data-file-type="${isImage ? 'image' : 'file'}" data-auth-url="${downloadUrl}" data-filename="${fileLabel}">
                             ${fileLabel}
                         </a>
                         <div class="file-meta-text">
@@ -866,21 +893,23 @@ const chat = {
             });
         }
 
-        // Attach file click handler for image preview
+        // Attach file click handler for authenticated download & image preview
         if (isFile) {
             const fileLink = messageDiv.querySelector('.file-name');
+            const fileThumb = messageDiv.querySelector('.file-thumb img');
             if (fileLink) {
-                const isImage = fileLink.dataset.fileType === 'image';
-                const downloadUrl = fileLink.getAttribute('href');
-                if (isImage) {
-                    fileLink.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        this.openImagePreview(downloadUrl);
-                    });
-                } else {
-                    fileLink.setAttribute('target', '_blank');
-                    fileLink.setAttribute('rel', 'noopener noreferrer');
-                }
+                const authUrl = fileLink.dataset.authUrl;
+                const fileName = fileLink.dataset.filename || 'download';
+                fileLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.downloadFileWithAuth(authUrl, fileName);
+                });
+            }
+            if (fileThumb) {
+                const authUrl = fileThumb.dataset.authUrl;
+                fileThumb.addEventListener('click', () => {
+                    this.downloadFileWithAuth(authUrl, 'image', true);
+                });
             }
         }
 
@@ -1224,7 +1253,7 @@ const chat = {
         }
 
         try {
-            const response = await api.get(`/messages/${this.roomCode}/active?userId=${encodeURIComponent(this.userId)}`);
+            const response = await api.get(`/messages/${this.roomCode}/active`);
             if (response.success && Array.isArray(response.data?.messages)) {
                 this.renderMessages(response.data.messages);
             }
@@ -1570,13 +1599,11 @@ const chat = {
      */
     async addReactionToMessage(messageId, emoji) {
         const roomCode = this.roomCode;
-        const userId = this.userId;
 
         try {
             const response = await api.post('/reactions/toggle', {
                 roomCode: roomCode,
                 messageId: messageId,
-                userId: userId,
                 emoji: emoji
             });
 
@@ -1902,7 +1929,6 @@ const chat = {
         try {
             // Call backend API to edit message
             const response = await api.put(`/messages/${this.roomCode}/${messageId}`, {
-                userId: this.userId,
                 content: newContent
             });
 
@@ -1945,7 +1971,7 @@ const chat = {
 
         try {
             // Call backend API to unsend message
-            const response = await api.delete(`/messages/${this.roomCode}/${messageId}?userId=${this.userId}`);
+            const response = await api.delete(`/messages/${this.roomCode}/${messageId}`);
 
             if (response.success) {
                 // Add fade out animation

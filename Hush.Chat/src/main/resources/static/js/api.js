@@ -26,7 +26,7 @@ const api = {
     /**
      * Make GET request
      */
-    async get(endpoint, requiresAuth = false, timeoutMs = null) {
+    async get(endpoint, requiresAuth = true, timeoutMs = null) {
         try {
             const headers = requiresAuth ? this.getAuthHeaders() : {
                 'Content-Type': 'application/json'
@@ -49,7 +49,7 @@ const api = {
     /**
      * Make POST request
      */
-    async post(endpoint, data, requiresAuth = false) {
+    async post(endpoint, data, requiresAuth = true) {
         try {
             const headers = requiresAuth ? this.getAuthHeaders() : {
                 'Content-Type': 'application/json'
@@ -71,7 +71,7 @@ const api = {
     /**
      * Make PUT request
      */
-    async put(endpoint, data, requiresAuth = false) {
+    async put(endpoint, data, requiresAuth = true) {
         try {
             const headers = requiresAuth ? this.getAuthHeaders() : {
                 'Content-Type': 'application/json'
@@ -93,7 +93,7 @@ const api = {
     /**
      * Make DELETE request
      */
-    async delete(endpoint, requiresAuth = false) {
+    async delete(endpoint, requiresAuth = true) {
         try {
             const headers = requiresAuth ? this.getAuthHeaders() : {
                 'Content-Type': 'application/json'
@@ -131,6 +131,34 @@ const api = {
             });
 
             return await this.handleResponse(response);
+        } catch (error) {
+            throw this.handleError(error);
+        }
+    },
+
+    /**
+     * Download a file as a blob with authorization header.
+     * Returns the raw Response object (caller reads as blob).
+     */
+    async download(endpoint) {
+        try {
+            const token = this.getSessionToken();
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`${config.API_BASE_URL}${endpoint}`, {
+                method: 'GET',
+                headers: headers,
+                signal: AbortSignal.timeout(config.REQUEST_TIMEOUT * 3)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Download failed with status ${response.status}`);
+            }
+
+            return response;
         } catch (error) {
             throw this.handleError(error);
         }
