@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -33,10 +34,11 @@ public class MessageController {
      */
     @PostMapping("/send")
     public ResponseEntity<ApiResponse<MessageResponseDto>> sendMessage(
-            @Valid @RequestBody SendMessageDto dto) {
+            @Valid @RequestBody SendMessageDto dto,
+            Principal principal) {
         
         String roomCode = dto.getRoomCode().toUpperCase();
-        String userId = dto.getUserId();
+        String userId = principal.getName();
         
         log.info("Sending message to room: {} by user: {}{}", roomCode, userId,
                  dto.getReplyTo() != null ? " (reply)" : "");
@@ -60,9 +62,10 @@ public class MessageController {
     @GetMapping("/{roomCode}/active")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getActiveMessages(
             @PathVariable String roomCode,
-            @RequestParam String userId) {
+            Principal principal) {
 
         roomCode = roomCode.toUpperCase();
+        String userId = principal.getName();
         List<MessageResponseDto> messages = messageService.getActiveMessages(roomCode, userId);
 
         Map<String, Object> response = new HashMap<>();
@@ -78,11 +81,11 @@ public class MessageController {
     @GetMapping("/{roomCode}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getMessages(
             @PathVariable String roomCode,
-            @RequestParam String userId,
+            Principal principal,
             @RequestParam(required = false) String since) {
         
         roomCode = roomCode.toUpperCase();
-        
+        String userId = principal.getName();
         // Parse since timestamp
         LocalDateTime sinceTimestamp = null;
         if (since != null && !since.isBlank()) {
@@ -119,15 +122,16 @@ public class MessageController {
     public ResponseEntity<ApiResponse<MessageResponseDto>> editMessage(
             @PathVariable String roomCode,
             @PathVariable String messageId,
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, String> body,
+            Principal principal) {
         
         roomCode = roomCode.toUpperCase();
-        String userId = body.get("userId");
+        String userId = principal.getName();
         String content = body.get("content");
         
-        if (userId == null || content == null) {
+        if (content == null) {
             return ResponseEntity.badRequest().body(
-                    ApiResponse.error("userId and content are required")
+                    ApiResponse.error("content is required")
             );
         }
         
@@ -148,9 +152,10 @@ public class MessageController {
     public ResponseEntity<ApiResponse<MessageResponseDto>> unsendMessage(
             @PathVariable String roomCode,
             @PathVariable String messageId,
-            @RequestParam String userId) {
+            Principal principal) {
         
         roomCode = roomCode.toUpperCase();
+        String userId = principal.getName();
         
         log.info("Unsending message {} in room {} by user {}", messageId, roomCode, userId);
         

@@ -226,10 +226,8 @@ const emojiSystem = {
      */
     async addReaction(messageId, emoji) {
         const roomCode = localStorage.getItem('roomCode');
-        const userId = localStorage.getItem('userId');
-        
-        if (!roomCode || !userId) {
-            console.error('Missing room or user info for reaction');
+        if (!roomCode) {
+            console.error('Missing room info for reaction');
             return;
         }
         
@@ -237,7 +235,6 @@ const emojiSystem = {
             const response = await api.post('/reactions/toggle', {
                 roomCode: roomCode,
                 messageId: messageId,
-                userId: userId,
                 emoji: emoji
             });
             

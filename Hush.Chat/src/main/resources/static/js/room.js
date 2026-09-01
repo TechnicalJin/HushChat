@@ -15,7 +15,7 @@ document.getElementById('createRoomForm').addEventListener('submit', async (e) =
         const response = await api.post('/rooms/create', {
             roomName: roomName,
             userName: userName
-        });
+        }, false);
         
         if (response.success) {
             const data = response.data;
@@ -63,7 +63,7 @@ document.getElementById('joinRoomForm').addEventListener('submit', async (e) => 
             roomCode: roomCode,
             userName: userName,
             userId: localStorage.getItem('userId') || null
-        });
+        }, false);
         
         if (response.success) {
             const data = response.data;

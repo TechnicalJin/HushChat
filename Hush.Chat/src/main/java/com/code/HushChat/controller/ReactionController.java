@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 
@@ -31,17 +32,19 @@ public class ReactionController {
      */
     @PostMapping("/toggle")
     public ResponseEntity<ApiResponse<ReactionResponseDto>> toggleReaction(
-            @Valid @RequestBody ReactionDto dto) {
+            @Valid @RequestBody ReactionDto dto,
+            Principal principal) {
         
         String roomCode = dto.getRoomCode().toUpperCase();
+        String userId = principal.getName();
         
         log.info("Toggle reaction {} on message {} by user {}", 
-                dto.getEmoji(), dto.getMessageId(), dto.getUserId());
+                dto.getEmoji(), dto.getMessageId(), userId);
         
         ReactionResponseDto response = reactionService.toggleReaction(
                 roomCode,
                 dto.getMessageId(),
-                dto.getUserId(),
+                userId,
                 dto.getEmoji()
         );
         
@@ -56,17 +59,19 @@ public class ReactionController {
      */
     @PostMapping
     public ResponseEntity<ApiResponse<ReactionResponseDto>> addReaction(
-            @Valid @RequestBody ReactionDto dto) {
+            @Valid @RequestBody ReactionDto dto,
+            Principal principal) {
         
         String roomCode = dto.getRoomCode().toUpperCase();
+        String userId = principal.getName();
         
         log.info("Add reaction {} on message {} by user {}", 
-                dto.getEmoji(), dto.getMessageId(), dto.getUserId());
+                dto.getEmoji(), dto.getMessageId(), userId);
         
         ReactionResponseDto response = reactionService.addReaction(
                 roomCode,
                 dto.getMessageId(),
-                dto.getUserId(),
+                userId,
                 dto.getEmoji()
         );
         
@@ -83,10 +88,11 @@ public class ReactionController {
     public ResponseEntity<ApiResponse<ReactionResponseDto>> removeReaction(
             @RequestParam String roomCode,
             @RequestParam String messageId,
-            @RequestParam String userId,
-            @RequestParam String emoji) {
+            @RequestParam String emoji,
+            Principal principal) {
         
         roomCode = roomCode.toUpperCase();
+        String userId = principal.getName();
         
         log.info("Remove reaction {} from message {} by user {}", emoji, messageId, userId);
         

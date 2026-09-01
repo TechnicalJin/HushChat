@@ -4,6 +4,7 @@ import com.code.HushChat.dto.FileUploadResponseDto;
 import com.code.HushChat.model.ApiResponse;
 import com.code.HushChat.model.FileMetadata;
 import com.code.HushChat.service.FileService;
+import com.code.HushChat.service.RoomService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +18,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.Principal;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/files")
@@ -25,32 +28,38 @@ import java.nio.charset.StandardCharsets;
 public class FileController {
 
     private final FileService fileService;
+    private final RoomService roomService;
 
     /**
      * Upload a file and associate it with a room as a message attachment.
      * POST /api/files/upload
      *
+     * Identity (userId and senderName) is derived from the authenticated
+     * JWT principal and room membership - never from client-supplied fields.
+     *
      * Frontend should send multipart/form-data with:
      * - roomCode
-     * - userId
-     * - senderName
      * - file
      */
     @PostMapping("/upload")
     public ResponseEntity<ApiResponse<FileUploadResponseDto>> uploadFile(
             @RequestParam("roomCode") String roomCode,
-            @RequestParam("userId") String userId,
-            @RequestParam("senderName") String senderName,
             @RequestParam("file") MultipartFile file,
             HttpServletRequest request,
-            @RequestHeader(value = "Authorization", required = false) String authHeader
+            Principal principal
     ) {
-        // FIX: Do NOT validate session here - endpoint is permitAll() in SecurityConfig
-        // The issue: sessionService checks InMemorySessionStore which is NOT synchronized with JWT tokens
-        // WebSocket authentication uses JwtTokenProvider, but this was checking TokenUtil sessions
-        // Since file uploads are public endpoints (no auth required), skip validation entirely
-        
+        String userId = principal.getName();
         String normalizedRoomCode = roomCode.toUpperCase();
+
+        // Resolve senderName from the room's userId -> name membership map.
+        String senderName = "Unknown";
+        try {
+            Map<String, String> members = roomService.getMembersOfRoom(normalizedRoomCode);
+            senderName = members.getOrDefault(userId, "Unknown");
+        } catch (Exception e) {
+            log.warn("Unable to resolve sender name for user {} in room {}: {}",
+                userId, normalizedRoomCode, e.getMessage());
+        }
 
         try {
             FileUploadResponseDto dto = fileService.uploadFile(
@@ -75,10 +84,18 @@ public class FileController {
     /**
      * Download a file by id.
      * GET /api/files/{fileId}/download
+     * Requires the caller to be an authenticated member of the file's room.
      */
     @GetMapping("/{fileId}/download")
-    public ResponseEntity<Resource> downloadFile(@PathVariable String fileId) {
+    public ResponseEntity<Resource> downloadFile(@PathVariable String fileId, Principal principal) {
         FileMetadata metadata = fileService.getFileForDownload(fileId);
+
+        // Enforce room membership: only authenticated members of the file's room
+        // may download it.
+        String userId = principal.getName();
+        if (!roomService.isUserInRoom(metadata.getRoomCode(), userId)) {
+            return ResponseEntity.status(403).build();
+        }
 
         FileSystemResource resource = new FileSystemResource(metadata.getFilePath());
         if (!resource.exists()) {

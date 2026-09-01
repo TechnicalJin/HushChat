@@ -183,7 +183,7 @@
         if (!roomInfoActive) return;
         
         try {
-            const response = await api.get(`/rooms/${roomCode}/info`);
+            const response = await api.get(`/rooms/${roomCode}/info`, false);
             if (response.success) {
                 const info = response.data;
                 // Update member count via chat module if available
@@ -237,7 +237,7 @@
             await api.post('/rooms/leave', {
                 roomCode: roomCode,
                 userId: userId
-            });
+            }, false);
             
             // Clear local storage
             if (typeof chat !== 'undefined' && chat.cleanup) {

@@ -14,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -197,5 +199,45 @@ public class RoomService {
             room.updateActivity(appConfig.getRoom().getInactivityTimeoutMinutes());
             roomStore.save(roomCode, room);
         }
+    }
+
+    /**
+     * Get the map of userId -> userName for all members (active and inactive)
+     * that have a known display name in the room.
+     *
+     * @param roomCode the room code
+     * @return an immutable-style map of userId to userName
+     * @throws RoomNotFoundException if the room does not exist or is expired
+     */
+    public Map<String, String> getMembersOfRoom(String roomCode) {
+        if (roomCode == null) {
+            return Collections.emptyMap();
+        }
+        ChatRoom room = roomStore.get(roomCode.toUpperCase());
+        if (room == null || room.isExpired()) {
+            throw new RoomNotFoundException("Room not found or expired: " + roomCode);
+        }
+        // Return a defensive copy to prevent callers mutating shared state.
+        return room.getUserIdToName() != null
+            ? new java.util.HashMap<>(room.getUserIdToName())
+            : Collections.emptyMap();
+    }
+
+    /**
+     * Check whether the given user is an active member of the room.
+     *
+     * @param roomCode the room code
+     * @param userId the user id to check
+     * @return true if the room exists, is not expired, and the user is active
+     */
+    public boolean isUserInRoom(String roomCode, String userId) {
+        if (roomCode == null || userId == null || userId.isBlank()) {
+            return false;
+        }
+        ChatRoom room = roomStore.get(roomCode.toUpperCase());
+        if (room == null || room.isExpired()) {
+            return false;
+        }
+        return room.isUserActive(userId);
     }
 }

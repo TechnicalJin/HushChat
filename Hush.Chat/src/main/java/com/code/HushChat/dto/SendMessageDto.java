@@ -16,7 +16,9 @@ public class SendMessageDto {
     @NotBlank(message = "Room code is required")
     private String roomCode;
     
-    @NotBlank(message = "User ID is required")
+    // userId is no longer accepted from the client — the server derives it
+    // from the JWT principal. The field is kept for backwards-compatible
+    // serialization only.
     private String userId;
     
     @NotBlank(message = "Message content is required")

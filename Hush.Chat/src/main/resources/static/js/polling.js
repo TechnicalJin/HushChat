@@ -73,7 +73,7 @@ const pollingService = {
 
         try {
             // Build query params
-            let endpoint = `/messages/${this.roomCode}?userId=${this.userId}`;
+            let endpoint = `/messages/${this.roomCode}`;
             if (this.lastMessageTime) {
                 endpoint += `&since=${this.lastMessageTime}`;
             }

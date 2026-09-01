@@ -31,8 +31,8 @@ document.getElementById('otpRequestForm')?.addEventListener('submit', async (e) 
     requestBtn.textContent = 'Requesting OTP...';
 
     try {
-        // Request OTP
-        const response = await api.post('/auth/request-otp', { deviceId });
+        // Request OTP (anonymous endpoint - no session token exists yet)
+        const response = await api.post('/auth/request-otp', { deviceId }, false);
 
         if (response.success) {
             // Store device ID for OTP verification page
