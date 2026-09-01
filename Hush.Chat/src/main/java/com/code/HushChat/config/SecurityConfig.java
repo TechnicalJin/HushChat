@@ -13,6 +13,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.header.writers.XXssProtectionHeaderWriter;
 
 /**
  * Spring Security Configuration for JWT-based authentication.
@@ -100,11 +102,16 @@ public class SecurityConfig {
                 // Reaction defaults are public (no auth needed for static emoji list)
                 .requestMatchers("/api/reactions/defaults").permitAll()
                 
+                // SECURITY FIX #9D: Actuator endpoints - only health is public;
+                // all other actuator endpoints (env, configprops, metrics, etc.)
+                // require authentication to prevent information leakage.
+                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/actuator/**").authenticated()
+
                 // Message, file, and reaction mutation/query endpoints require authentication
                 .requestMatchers("/api/messages/**").authenticated()
                 .requestMatchers("/api/files/**").authenticated()
                 .requestMatchers("/api/reactions/**").authenticated()
-                .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/ws/**").permitAll()
                 
                 // Public static frontend resources (Spring Boot serves these from classpath:/static/)
@@ -119,6 +126,38 @@ public class SecurityConfig {
                 .anyRequest().denyAll()
             )
             
+            // SECURITY FIX #9C: Configure security response headers
+            .headers(headers -> headers
+                // Prevent browsers from MIME-sniffing the response content type
+                .contentTypeOptions(contentType -> {})
+                // Prevent page from being embedded in an iframe (clickjacking)
+                .frameOptions(frame -> frame.deny())
+                // Enable XSS protection in browsers
+                .xssProtection(xss -> xss.headerValue(XXssProtectionHeaderWriter.HeaderValue.ENABLED_MODE_BLOCK))
+                // Referrer-Policy: only send origin to cross-origin requests
+                .referrerPolicy(referrer -> referrer.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+                // Content-Security-Policy: restrict resource loading
+                .contentSecurityPolicy(csp -> csp.policyDirectives(
+                    "default-src 'self'; " +
+                    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+                    "style-src 'self' 'unsafe-inline'; " +
+                    "img-src 'self' data:; " +
+                    "font-src 'self'; " +
+                    "connect-src 'self' ws: wss:; " +
+                    "frame-ancestors 'none'"
+                ))
+                // HSTS: tell browsers to only use HTTPS for 1 year (including subdomains)
+                .httpStrictTransportSecurity(hsts -> hsts
+                    .includeSubDomains(true)
+                    .maxAgeInSeconds(31536000) // 1 year
+                    .preload(true)
+                )
+                // Permissions-Policy: disable unused browser features
+                .permissionsPolicy(permissions -> permissions.policy(
+                    "camera=(), microphone=(), geolocation=(), payment=()"
+                ))
+            )
+
             // Configure exception handling
             .exceptionHandling(exceptions -> exceptions
                 // Handle unauthorized requests (401)
